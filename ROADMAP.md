@@ -6,15 +6,15 @@ Same rule as ODC: this file exists so scope questions have an answer other than 
 
 - [x] Repo survey, landscape research, licensing analysis (`docs/RESEARCH.md`)
 - [x] Hybrid architecture + ADRs 0001–0004
-- [ ] **Benji reviews; nothing below starts without a go-ahead**
+- [x] **Benji reviews; nothing below starts without a go-ahead** (approved 2026-08-23)
 
 ## P1 — Provenance-carrying headless slice (the thin thread)
 
 Close the ecosystem's actual gap first: ODC `handoff` stages STL + sidecar to a workspace, then a human slices in a GUI and provenance dies there.
 
-- [ ] Verify `OrcaSlicer_AS` builds on this machine; document exact CLI invocation for headless slicing (upstream CLI exists; harden for our use)
-- [ ] `obcslice` wrapper (this repo): mesh + profile + design sidecar in → G-code + **slice record** out (canonical JSON, SHA-256, config digest, fork commit, degradations)
-- [ ] Slice record schema v0.1 (`docs/specs/SLICE-RECORD.md`), media type `application/vnd.obc.slice+json`, byte-compatible with ODC/BINGO `canonical_json`
+- [x] CLI contract documented from fork source (`docs/specs/ORCA-CLI.md`); **build on this machine + live invocation check still pending** (2026-08-23)
+- [x] `obcslice` wrapper: mesh + profiles + design sidecar in → G-code + **slice record** out; sidecar↔model hash verified before slicing, refuse on mismatch; 12 tests green (2026-08-23)
+- [x] Slice record schema v0.1 (`docs/specs/SLICE-RECORD.md`), media type `application/vnd.obc.slice+json`, byte-compatible with ODC/BINGO `canonical_json` — checked against Python reference (2026-08-23)
 - [ ] MCP tool `slice` (execute — it writes only local files) + `propose_upload`/`propose_print` passthroughs to AdvancedStudio (propose-only, ADR-0004)
 - [ ] End-to-end: ODC enclosure run → obcslice → proposal → human approves → K2 prints → job ledger row references design *and* slice hashes
 

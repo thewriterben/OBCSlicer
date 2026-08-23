@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- net8.0, not the ecosystem's net9.0: chosen so the build is verifiable in the
+       sandboxed CI-like environment available today (SDK 8 via apt). SDK 10 on the
+       dev machine builds this unchanged. Revisit alignment when net9 tooling is
+       verifiable here; zero package dependencies by design (no NuGet at slice time,
+       mirroring BINGO's stdlib-only discipline). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>ObcSlice</RootNamespace>
+    <AssemblyName>obcslice</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+</Project>

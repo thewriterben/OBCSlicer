@@ -15,9 +15,18 @@ Slicing layer for the OBC ecosystem: discrete multi-material today, functionally
 
 OrcaSlicer (forked as `OrcaSlicer_AS`) stays the toolpath kernel — nobody should rewrite Arachne. A separate **material-field engine** (C#/.NET beside OpenDesignCore, on PicoGK/OpenVDB) owns volumetric multi-material: it compiles material fields into discrete regions the fork can slice now, and into gradient-aware toolpaths later. OpenVCAD is a *format peer*, never a dependency — its source is non-commercial-licensed and cannot touch an AGPL codebase; we interoperate through OpenVDB grids and the 3MF volumetric extension, and implement gradient slicing clean-room from the published papers. BumpMesh (stlTexturizer) runs as a separate preprocessing process. Every artifact crossing a boundary carries a SHA-256 provenance sidecar compatible with OpenDesignCore's ledger and ProjectBINGO's asset graph; prints are proposed to AdvancedStudio, never started by software.
 
+## Verify with
+
+```
+dotnet build OBCSlicer.sln -c Release
+dotnet run --project tests/obcslice.Tests -c Release     # zero-dep assert runner; nonzero exit on failure
+```
+
+Toolchain: any .NET SDK ≥ 8 (projects target net8.0; see the csproj note). Zero package dependencies; `NuGet.config` clears feeds so restore is hermetic and offline.
+
 ## Status
 
-Planning stage. No slicer code yet — per ecosystem rules, multi-file work waits for a reviewed plan. See `ROADMAP.md` P1 for the first code.
+P1 in progress: `obcslice` (headless slice + slice record) is implemented and tested; a live run against a built `orca-slicer.exe` with flattened K2 Plus presets is the next verification step. See `ROADMAP.md` and `CHANGELOG.md`.
 
 ## License
 
