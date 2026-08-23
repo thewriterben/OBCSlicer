@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Stdlib-only stdio MCP server. ODC's MCP server uses the official SDK from
+       NuGet; that feed is unreachable in the verification sandbox, so this speaks
+       the minimal protocol subset (initialize / tools/list / tools/call / ping)
+       directly. Swap to the SDK when NuGet access exists, keeping Tools intact. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>ObcSlicerMcp</RootNamespace>
+    <AssemblyName>obcslicer-mcp</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\obcslice\obcslice.csproj" />
+  </ItemGroup>
+
+</Project>

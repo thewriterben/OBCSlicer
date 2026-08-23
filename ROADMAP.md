@@ -15,7 +15,7 @@ Close the ecosystem's actual gap first: ODC `handoff` stages STL + sidecar to a 
 - [x] CLI contract documented from fork source (`docs/specs/ORCA-CLI.md`); **build on this machine + live invocation check still pending** (2026-08-23)
 - [x] `obcslice` wrapper: mesh + profiles + design sidecar in → G-code + **slice record** out; sidecar↔model hash verified before slicing, refuse on mismatch; 12 tests green (2026-08-23)
 - [x] Slice record schema v0.1 (`docs/specs/SLICE-RECORD.md`), media type `application/vnd.obc.slice+json`, byte-compatible with ODC/BINGO `canonical_json` — checked against Python reference (2026-08-23)
-- [ ] MCP tool `slice` (execute — it writes only local files) + `propose_upload`/`propose_print` passthroughs to AdvancedStudio (propose-only, ADR-0004)
+- [x] MCP surface (`obcslicer-mcp`, stdlib-only stdio JSON-RPC): `slice` (executes — writes only its own outdir) + `stage_for_studio` (hash-named staging; refuses failed/dry-run/unattested records). Propose passthroughs deliberately deferred: AdvancedStudio's `/api/propose` schema must be read from its source, not inferred — connect that folder to wire it (2026-08-23)
 - [ ] End-to-end: ODC enclosure run → obcslice → proposal → human approves → K2 prints → job ledger row references design *and* slice hashes
 
 ## P2 — Discrete multi-material + texture pipeline

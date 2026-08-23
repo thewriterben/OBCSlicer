@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\obcslice\obcslice.csproj" />
+    <ProjectReference Include="..\..\src\obcslicer-mcp\obcslicer-mcp.csproj" />
   </ItemGroup>
 
 </Project>

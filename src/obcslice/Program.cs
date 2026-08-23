@@ -4,7 +4,7 @@ namespace ObcSlice;
 
 /// <summary>
 /// obcslice — provenance-carrying headless slice wrapper around OrcaSlicer_AS.
-/// Mesh + profiles (+ optional ODC design sidecar) in → G-code + slice record out.
+/// Thin CLI over <see cref="SliceOperation"/>; the MCP server is the other surface.
 /// See docs/specs/SLICE-RECORD.md and docs/specs/ORCA-CLI.md.
 /// </summary>
 public static class Program
@@ -19,15 +19,6 @@ public static class Program
         (canonical JSON, schema obc-slice/0.1) next to the G-code.
         Exit codes: 0 ok · 1 slice failed (record still written) · 2 invalid arguments/inputs.
         """;
-
-    private static readonly Dictionary<string, string> MediaTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        [".stl"] = "model/stl",
-        [".3mf"] = "model/3mf",
-        [".step"] = "model/step",
-        [".stp"] = "model/step",
-        [".obj"] = "model/obj",
-    };
 
     public static int Main(string[] args)
     {
@@ -52,7 +43,6 @@ public static class Program
         if (args[0] != "slice")
             throw new ArgumentException($"Unknown command '{args[0]}'. Only 'slice' exists in v0.1.");
 
-        // ---- parse ------------------------------------------------------------
         string? strModel = null, strMachine = null, strProcess = null, strOutDir = null;
         string? strSlicer = Environment.GetEnvironmentVariable("OBCSLICE_ORCA");
         string? strSidecar = null, strSlicerCommit = null;
@@ -94,132 +84,32 @@ public static class Program
             }
         }
 
-        // ---- validate at the boundary ----------------------------------------
         if (strModel is null || strMachine is null || strProcess is null || strOutDir is null)
             throw new ArgumentException("--model, --machine, --process and --outdir are required.");
-        foreach (string strPath in new[] { strModel, strMachine, strProcess }.Concat(astrFilaments))
-            if (!File.Exists(strPath))
-                throw new FileNotFoundException($"Input not found: {strPath}");
-        if (strSidecar is not null && !File.Exists(strSidecar))
-            throw new FileNotFoundException($"Design sidecar not found: {strSidecar}");
-        if (!bDryRun && (strSlicer is null || !File.Exists(strSlicer)))
-            throw new ArgumentException(
-                "No slicer binary: pass --slicer or set OBCSLICE_ORCA (or use --dry-run).");
 
-        string strExt = Path.GetExtension(strModel);
-        if (!MediaTypes.TryGetValue(strExt, out string? strMediaType))
-            throw new ArgumentException(
-                $"Unsupported model type '{strExt}'. Supported: {string.Join(", ", MediaTypes.Keys)}.");
-
-        Directory.CreateDirectory(strOutDir);
-
-        // ---- hash inputs, verify design linkage ------------------------------
-        List<Degradation> aDegradations = new();
-        string strModelSha = SliceRecord.StrHashFile(strModel);
-
-        SliceRecord.DesignProvenance? oDesign = null;
-        if (strSidecar is not null)
-            oDesign = SliceRecord.ParseAndVerifySidecar(strSidecar, strModelSha, strRunId); // throws on mismatch
-        else
-            aDegradations.Add(new Degradation("no_design_provenance",
-                "No --design-sidecar given; this slice is not linked to a design run."));
-
-        var aProfiles = new List<SliceRecord.ProfileRef>
+        SliceOperation.Outcome oOutcome = SliceOperation.Execute(new SliceOperation.Request
         {
-            new("machine", Path.GetFileName(strMachine), SliceRecord.StrHashFile(strMachine), null),
-            new("process", Path.GetFileName(strProcess), SliceRecord.StrHashFile(strProcess), null),
-        };
-        for (int i = 0; i < astrFilaments.Count; i++)
-            aProfiles.Add(new("filament", Path.GetFileName(astrFilaments[i]),
-                SliceRecord.StrHashFile(astrFilaments[i]), i + 1));
-
-        foreach (string strProfile in new[] { strMachine, strProcess }.Concat(astrFilaments))
-            if (OrcaInvocation.BProfileHasInherits(strProfile))
-                aDegradations.Add(new Degradation("unflattened_profile",
-                    $"{Path.GetFileName(strProfile)} contains 'inherits'; " +
-                    "export a flattened preset for a stable attestation (ORCA-CLI.md caveat 1)."));
-
-        if (strSlicerCommit is null)
-            aDegradations.Add(new Degradation("slicer_commit_unrecorded",
-                "No --slicer-commit given; binary hash still identifies the slicer."));
-
-        // ---- run --------------------------------------------------------------
-        List<string> astrArgs = OrcaInvocation.BuildArgs(
-            strModel, strMachine, strProcess, astrFilaments, strOutDir, nPlate, oOverrides);
-
-        int nExitCode;
-        string strStderrTail;
-        string strBinarySha;
-        if (bDryRun)
-        {
-            aDegradations.Add(new Degradation("dry_run", "Slicer not executed; no outputs."));
-            nExitCode = 0;
-            strStderrTail = "";
-            strBinarySha = strSlicer is not null && File.Exists(strSlicer)
-                ? SliceRecord.StrHashFile(strSlicer) : "unknown";
-        }
-        else
-        {
-            strBinarySha = SliceRecord.StrHashFile(strSlicer!);
-            OrcaInvocation.RunResult oRun = OrcaInvocation.Run(
-                strSlicer!, astrArgs);
-            nExitCode = oRun.NExitCode;
-            strStderrTail = oRun.StrStderrTail;
-        }
-
-        // ---- collect outputs --------------------------------------------------
-        var aOutputs = new List<SliceRecord.OutputRef>();
-        if (!bDryRun)
-        {
-            foreach (string strGcode in Directory.EnumerateFiles(strOutDir, "plate_*.gcode")
-                         .OrderBy(s => s, StringComparer.Ordinal))
-            {
-                string strName = Path.GetFileName(strGcode);
-                string strPlatePart = strName["plate_".Length..].Split('_', '.')[0];
-                int nPlateNum = int.TryParse(strPlatePart, NumberStyles.None,
-                    CultureInfo.InvariantCulture, out int n) ? n : 0;
-                aOutputs.Add(new(strName, SliceRecord.StrHashFile(strGcode), nPlateNum));
-            }
-            if (nExitCode != 0)
-                aDegradations.Add(new Degradation("slice_failed",
-                    $"Slicer exit code {nExitCode}; do not propose uploads from this record."));
-            else if (aOutputs.Count == 0)
-                aDegradations.Add(new Degradation("output_missing",
-                    "Slicer exited 0 but produced no plate_*.gcode in the output directory."));
-        }
-
-        // ---- write the record -------------------------------------------------
-        var oRecord = new SliceRecord
-        {
-            StrCreatedUtc = DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
-            StrModelName = Path.GetFileName(strModel),
-            StrModelSha256 = strModelSha,
-            StrModelMediaType = strMediaType,
-            Profiles = aProfiles,
+            StrModel = strModel,
+            StrMachine = strMachine,
+            StrProcess = strProcess,
+            AstrFilaments = astrFilaments,
+            StrOutDir = strOutDir,
+            StrSlicer = strSlicer,
+            StrDesignSidecar = strSidecar,
+            StrDesignRunId = strRunId,
+            StrSlicerCommit = strSlicerCommit,
+            NPlate = nPlate,
             Overrides = oOverrides,
-            Design = oDesign,
-            StrSlicerName = "OrcaSlicer_AS",
-            StrSlicerBinarySha256 = strBinarySha,
-            StrSlicerCommit = strSlicerCommit ?? "unknown",
-            Invocation = astrArgs.Prepend(strSlicer ?? "orca-slicer").ToList(),
-            NExitCode = nExitCode,
-            Outputs = aOutputs,
-            StrStderrTail = strStderrTail,
-            Degradations = aDegradations,
-        };
+            BDryRun = bDryRun,
+        });
 
-        byte[] abRecord = oRecord.ToCanonicalBytes();
-        string strRecordPath = Path.Combine(strOutDir,
-            Path.GetFileNameWithoutExtension(strModel) + ".slice.json");
-        File.WriteAllBytes(strRecordPath, abRecord);
-
-        Console.WriteLine($"slice record: {strRecordPath}");
-        Console.WriteLine($"record sha256: {SliceRecord.StrHashFile(strRecordPath)}");
-        foreach (Degradation oD in aDegradations)
+        Console.WriteLine($"slice record: {oOutcome.StrRecordPath}");
+        Console.WriteLine($"record sha256: {oOutcome.StrRecordSha256}");
+        foreach (Degradation oD in oOutcome.Degradations)
             Console.WriteLine($"degradation: {oD.StrCode} — {oD.StrDetail}");
-        foreach (SliceRecord.OutputRef oO in aOutputs)
+        foreach (SliceRecord.OutputRef oO in oOutcome.Outputs)
             Console.WriteLine($"output: {oO.StrName} sha256={oO.StrSha256}");
 
-        return nExitCode == 0 ? 0 : 1;
+        return oOutcome.NExitCode == 0 ? 0 : 1;
     }
 }

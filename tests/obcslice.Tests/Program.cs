@@ -92,7 +92,7 @@ public static class Tests
 
     // ---- SliceRecord ---------------------------------------------------------
 
-    private static SliceRecord ORecord() => new()
+    private static SliceRecord ORecord(IReadOnlyList<SliceRecord.OutputRef>? aOutputs = null) => new()
     {
         StrCreatedUtc = "2026-08-23T00:00:00Z",
         StrModelName = "m.stl",
@@ -111,7 +111,7 @@ public static class Tests
         StrSlicerCommit = "542cd18d19",
         Invocation = new[] { "orca-slicer", "m.stl" },
         NExitCode = 0,
-        Outputs = new[] { new SliceRecord.OutputRef("plate_1.gcode", new string('f', 64), 1) },
+        Outputs = aOutputs ?? new[] { new SliceRecord.OutputRef("plate_1.gcode", new string('f', 64), 1) },
         StrStderrTail = "",
         Degradations = Array.Empty<Degradation>(),
     };
@@ -207,6 +207,113 @@ public static class Tests
         Assert.True(strRecord.Contains("\"unflattened_profile\""), "inherits degradation");
         Assert.True(strRecord.Contains("\"dry_run\""), "dry-run degradation");
         Assert.True(strRecord.Contains("\"design_provenance\":null"), "design null");
+    }
+
+    // ---- MCP server ----------------------------------------------------------
+
+    private static System.Text.Json.JsonElement OMcp(string strRequest)
+    {
+        string? strResponse = ObcSlicerMcp.McpServer.StrHandleMessage(strRequest);
+        Assert.True(strResponse is not null, "expected a response");
+        return System.Text.Json.JsonDocument.Parse(strResponse!).RootElement;
+    }
+
+    public static void McpInitializeHandshake()
+    {
+        var o = OMcp("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\"," +
+            "\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{}}}");
+        Assert.Equal("2025-03-26", o.GetProperty("result").GetProperty("protocolVersion").GetString()!);
+        Assert.Equal("obcslicer-mcp",
+            o.GetProperty("result").GetProperty("serverInfo").GetProperty("name").GetString()!);
+    }
+
+    public static void McpNotificationsAreSilent()
+    {
+        Assert.True(ObcSlicerMcp.McpServer.StrHandleMessage(
+            "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}") is null,
+            "notification must produce no response");
+    }
+
+    public static void McpToolsListAndUnknownMethod()
+    {
+        var o = OMcp("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}");
+        string strJson = o.GetRawText();
+        Assert.True(strJson.Contains("\"slice\"") && strJson.Contains("\"stage_for_studio\""),
+            "both tools listed");
+        var oErr = OMcp("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"resources/list\"}");
+        Assert.True(oErr.GetProperty("error").GetProperty("code").GetInt32() == -32601,
+            "unknown method → -32601");
+    }
+
+    public static void McpSliceDryRunAndStageRefusal()
+    {
+        string strDir = Directory.CreateTempSubdirectory("obcslice-mcp").FullName;
+        string strModel = Path.Combine(strDir, "part.stl");
+        File.WriteAllBytes(strModel, new byte[] { 9, 9, 9 });
+        File.WriteAllText(Path.Combine(strDir, "mach.json"), "{}");
+        File.WriteAllText(Path.Combine(strDir, "proc.json"), "{}");
+        string strOut = Path.Combine(strDir, "out");
+
+        string strArgs = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["model"] = strModel,
+            ["machine"] = Path.Combine(strDir, "mach.json"),
+            ["process"] = Path.Combine(strDir, "proc.json"),
+            ["outdir"] = strOut,
+            ["dry_run"] = true,
+        });
+        var o = OMcp("{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\"," +
+            $"\"params\":{{\"name\":\"slice\",\"arguments\":{strArgs}}}}}");
+        Assert.True(!o.GetProperty("result").GetProperty("isError").GetBoolean(), "slice dry run ok");
+        string strRecordPath = Path.Combine(strOut, "part.slice.json");
+        Assert.True(File.Exists(strRecordPath), "record written via MCP");
+
+        // Staging must refuse a dry-run record.
+        File.WriteAllText(Path.Combine(strDir, "fake.gcode"), "G28\n");
+        string strStageArgs = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["gcode"] = Path.Combine(strDir, "fake.gcode"),
+            ["slice_record"] = strRecordPath,
+            ["staging_dir"] = Path.Combine(strDir, "staging"),
+        });
+        var oStage = OMcp("{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\"," +
+            $"\"params\":{{\"name\":\"stage_for_studio\",\"arguments\":{strStageArgs}}}}}");
+        Assert.True(oStage.GetProperty("result").GetProperty("isError").GetBoolean(),
+            "stage must refuse dry_run record");
+        Assert.True(oStage.GetRawText().Contains("dry_run"), "refusal names the degradation");
+    }
+
+    public static void McpStageHappyPathAndUnattestedRefusal()
+    {
+        string strDir = Directory.CreateTempSubdirectory("obcslice-stage").FullName;
+        string strGcode = Path.Combine(strDir, "plate_1.gcode");
+        File.WriteAllText(strGcode, "G28\nG1 X10\n");
+        string strGcodeSha = SliceRecord.StrHashFile(strGcode);
+
+        SliceRecord oRecord = ORecord(new[] { new SliceRecord.OutputRef("plate_1.gcode", strGcodeSha, 1) });
+        string strRecordPath = Path.Combine(strDir, "part.slice.json");
+        File.WriteAllBytes(strRecordPath, oRecord.ToCanonicalBytes());
+
+        string strStaging = Path.Combine(strDir, "staging");
+        string strArgs = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["gcode"] = strGcode, ["slice_record"] = strRecordPath, ["staging_dir"] = strStaging,
+        });
+        var o = OMcp("{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\"," +
+            $"\"params\":{{\"name\":\"stage_for_studio\",\"arguments\":{strArgs}}}}}");
+        Assert.True(!o.GetProperty("result").GetProperty("isError").GetBoolean(), "stage ok");
+        Assert.True(File.Exists(Path.Combine(strStaging, strGcodeSha + ".gcode")),
+            "hash-named gcode staged");
+
+        // Tampered G-code (hash no longer attested) must be refused.
+        File.AppendAllText(strGcode, "M104 S999\n");
+        var oBad = OMcp("{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\"," +
+            $"\"params\":{{\"name\":\"stage_for_studio\",\"arguments\":{strArgs}}}}}");
+        Assert.True(oBad.GetProperty("result").GetProperty("isError").GetBoolean(),
+            "tampered gcode refused");
+        // Note: System.Text.Json escapes apostrophes in output, so match a clean substring.
+        Assert.True(oBad.GetRawText().Contains("attested outputs"),
+            "refusal explains attestation failure");
     }
 
     public static void MismatchedSidecarIsExitCode2()

@@ -3,13 +3,15 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{6CFC3774-B190-46C0-828F-4A8E5A620198}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{48F7AD81-AA54-4F2E-9A53-C63E54AF26E9}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "obcslice", "src\obcslice\obcslice.csproj", "{8B6756BB-01B6-4071-966F-6CE2F93F0F45}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "obcslice", "src\obcslice\obcslice.csproj", "{9C2D04FE-0699-449E-8FA1-9CCE6C6EB33A}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{3715189A-BBE4-4296-B7E8-E3055299BBA4}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "obcslicer-mcp", "src\obcslicer-mcp\obcslicer-mcp.csproj", "{63B9904D-BC73-45EC-9821-03D8D255F9DE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "obcslice.Tests", "tests\obcslice.Tests\obcslice.Tests.csproj", "{44624142-9112-4D9C-A7ED-233E59D550E6}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{19B7ECB4-8176-45A2-B406-3A177971BB54}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "obcslice.Tests", "tests\obcslice.Tests\obcslice.Tests.csproj", "{A87582F1-DF15-4C02-996C-0EDE7463F2E7}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -20,17 +22,22 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{8B6756BB-01B6-4071-966F-6CE2F93F0F45}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{8B6756BB-01B6-4071-966F-6CE2F93F0F45}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{8B6756BB-01B6-4071-966F-6CE2F93F0F45}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{8B6756BB-01B6-4071-966F-6CE2F93F0F45}.Release|Any CPU.Build.0 = Release|Any CPU
-		{44624142-9112-4D9C-A7ED-233E59D550E6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{44624142-9112-4D9C-A7ED-233E59D550E6}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{44624142-9112-4D9C-A7ED-233E59D550E6}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{44624142-9112-4D9C-A7ED-233E59D550E6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9C2D04FE-0699-449E-8FA1-9CCE6C6EB33A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9C2D04FE-0699-449E-8FA1-9CCE6C6EB33A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9C2D04FE-0699-449E-8FA1-9CCE6C6EB33A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9C2D04FE-0699-449E-8FA1-9CCE6C6EB33A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{63B9904D-BC73-45EC-9821-03D8D255F9DE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{63B9904D-BC73-45EC-9821-03D8D255F9DE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{63B9904D-BC73-45EC-9821-03D8D255F9DE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{63B9904D-BC73-45EC-9821-03D8D255F9DE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A87582F1-DF15-4C02-996C-0EDE7463F2E7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A87582F1-DF15-4C02-996C-0EDE7463F2E7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A87582F1-DF15-4C02-996C-0EDE7463F2E7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A87582F1-DF15-4C02-996C-0EDE7463F2E7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
-		{8B6756BB-01B6-4071-966F-6CE2F93F0F45} = {6CFC3774-B190-46C0-828F-4A8E5A620198}
-		{44624142-9112-4D9C-A7ED-233E59D550E6} = {3715189A-BBE4-4296-B7E8-E3055299BBA4}
+		{9C2D04FE-0699-449E-8FA1-9CCE6C6EB33A} = {48F7AD81-AA54-4F2E-9A53-C63E54AF26E9}
+		{63B9904D-BC73-45EC-9821-03D8D255F9DE} = {48F7AD81-AA54-4F2E-9A53-C63E54AF26E9}
+		{A87582F1-DF15-4C02-996C-0EDE7463F2E7} = {19B7ECB4-8176-45A2-B406-3A177971BB54}
 	EndGlobalSection
 EndGlobal
