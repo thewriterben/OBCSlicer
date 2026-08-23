@@ -15,8 +15,8 @@ Close the ecosystem's actual gap first: ODC `handoff` stages STL + sidecar to a 
 - [x] CLI contract documented from fork source (`docs/specs/ORCA-CLI.md`) and **verified live** against official V2.4.2 portable (auto-fetched to `.tools/`): ODC artifact + sidecar → G-code + slice record, exit 0. Live-run hazards recorded in the spec (2026-08-23)
 - [x] `obcslice` wrapper: mesh + profiles + design sidecar in → G-code + **slice record** out; sidecar↔model hash verified before slicing, refuse on mismatch; 12 tests green (2026-08-23)
 - [x] Slice record schema v0.1 (`docs/specs/SLICE-RECORD.md`), media type `application/vnd.obc.slice+json`, byte-compatible with ODC/BINGO `canonical_json` — checked against Python reference (2026-08-23)
-- [x] MCP surface (`obcslicer-mcp`, stdlib-only stdio JSON-RPC): `slice` (executes — writes only its own outdir) + `stage_for_studio` (hash-named staging; refuses failed/dry-run/unattested records). Propose passthroughs deliberately deferred: AdvancedStudio's `/api/propose` schema must be read from its source, not inferred — connect that folder to wire it (2026-08-23)
-- [ ] End-to-end: ODC enclosure run → obcslice → proposal → human approves → K2 prints → job ledger row references design *and* slice hashes
+- [x] MCP surface (`obcslicer-mcp`, stdlib-only stdio JSON-RPC): `slice` + `stage_for_studio` (design+gcode-hash naming so AdvancedStudio's `carries_design_hash` check passes) + **`propose_upload`/`propose_print`** — contract read from studio-core source (guard.py/staging.py/app.py), propose-only, human approves in the dashboard. **Live-verified against the running studio: field-cube G-code staged and proposed, confirmation registered, honest approval prompt** (2026-08-23)
+- [ ] End-to-end: run → obcslice → proposal → **human approves** → K2 prints → job ledger row references design *and* slice hashes. Everything up to the approval is live; the approval and print are Benji's
 
 ## P2 — Discrete multi-material + texture pipeline
 

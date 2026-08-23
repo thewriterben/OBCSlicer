@@ -536,8 +536,11 @@ public static class Tests
         var o = OMcp("{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\"," +
             $"\"params\":{{\"name\":\"stage_for_studio\",\"arguments\":{strArgs}}}}}");
         Assert.True(!o.GetProperty("result").GetProperty("isError").GetBoolean(), "stage ok");
-        Assert.True(File.Exists(Path.Combine(strStaging, strGcodeSha + ".gcode")),
-            "hash-named gcode staged");
+        // Name leads with the design hash's first 12 (ORecord's design = 'a'*64) so
+        // AdvancedStudio's carries_design_hash check passes, then the gcode hash.
+        string strExpectedName = $"{new string('a', 12)}-{strGcodeSha[..12]}.gcode";
+        Assert.True(File.Exists(Path.Combine(strStaging, strExpectedName)),
+            $"design+gcode-hash-named gcode staged ({strExpectedName})");
 
         // Tampered G-code (hash no longer attested) must be refused.
         File.AppendAllText(strGcode, "M104 S999\n");

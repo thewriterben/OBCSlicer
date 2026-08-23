@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-23 — AdvancedStudio propose passthrough, live
+
+- Contract read from the real source (`studio-core`: guard.py's propose-only Guard, staging.py's bounded resolve + `carries_design_hash`, app.py's `/api/propose` handlers) — no inference.
+- `obcslicer-mcp` v0.2: `propose_upload` and `propose_print` POST to `/api/propose` (optional `X-Studio-Token`; base URL via `OBCSLICE_STUDIO`, default loopback :8770). Both only register a pending confirmation — the human approval and any print start remain in AdvancedStudio, by both sides' design.
+- `stage_for_studio` now names staged G-code `<design12>-<gcode12>.gcode`, design anchor = ODC artifact hash when the slice record has one, else the sliced model's hash — so the studio's provenance check passes and the approval prompt names the design honestly.
+- **Live-verified against the running studio**: field-cube G-code staged into the real staging dir, `gcode_upload` proposed, confirmation `65b4635b451e` registered with prompt "Upload '47a9eb838791-3867ba336621.gcode' (0.6 MB) … sliced from design sha256:47a9eb838791" — no rename warning. 24/24 tests.
+
 ## 2026-08-23 — Field Engine v0: declared fields to multi-material G-code, live
 
 - `src/fieldengine` (net9.0 + PicoGK 2.2.0, the ODC stack; own `FieldEngine.slnx` since the sandbox that verifies the net8.0 projects lacks the PicoGK runtime): `obc-field/0.1` specs — mesh (mm, declared) + explicit voxel size + axis-band material field → per-band voxel regions (box-voxel booleans; `voxIntersectImplicit` SEH-faults under instance-Library mode, avoided and documented) → obc3mf manifest + deterministic timestamp-free field record.

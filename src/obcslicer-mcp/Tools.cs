@@ -4,12 +4,13 @@ using ObcSlice;
 
 namespace ObcSlicerMcp;
 
-/// <summary>The two tools of v0.1. `slice` executes locally (it writes only into
-/// its own output directory). `stage_for_studio` copies hash-named artifacts into
-/// AdvancedStudio's bounded staging directory — staging is not proposing: the
-/// upload/print proposals and their human approval stay in AdvancedStudio
-/// (ADR-0004). A propose passthrough is deliberately absent until that API's
-/// source can be read rather than inferred.</summary>
+/// <summary>Tools of v0.2. `slice` executes locally (it writes only into its own
+/// output directory). `stage_for_studio` copies hash-named artifacts into
+/// AdvancedStudio's bounded staging directory. `propose_upload`/`propose_print`
+/// POST to AdvancedStudio's `/api/propose` (contract read from studio-core
+/// source: guard.py, staging.py, app.py L624) — they only REGISTER a pending
+/// confirmation; a human approves in the dashboard, and no approval capability
+/// exists here (ADR-0004, AdvancedStudio's own safety contract).</summary>
 public static class Tools
 {
     public static List<object?> ToolDefinitions() => new()
@@ -79,6 +80,45 @@ public static class Tools
                 ["required"] = new List<object?> { "gcode", "slice_record" },
             },
         },
+        new Dictionary<string, object?>
+        {
+            ["name"] = "propose_upload",
+            ["description"] =
+                "Propose uploading a staged G-code file to the printer via AdvancedStudio's " +
+                "/api/propose. Registers a pending confirmation that a HUMAN must approve in the " +
+                "studio dashboard — this tool cannot approve anything. The filename is relative " +
+                "to AdvancedStudio's staging directory. Does not start a print.",
+            ["inputSchema"] = new Dictionary<string, object?>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object?>
+                {
+                    ["filename"] = OStr("Staged file name, relative to the staging directory (from stage_for_studio)."),
+                    ["design_sha256"] = OStr("Design artifact hash the G-code was sliced from (64 hex)."),
+                    ["studio_url"] = OStr("AdvancedStudio base URL (default env OBCSLICE_STUDIO or http://127.0.0.1:8770)."),
+                },
+                ["required"] = new List<object?> { "filename" },
+            },
+        },
+        new Dictionary<string, object?>
+        {
+            ["name"] = "propose_print",
+            ["description"] =
+                "Propose starting a print of an uploaded file via AdvancedStudio's /api/propose. " +
+                "Registers a pending confirmation that a HUMAN must approve in the studio " +
+                "dashboard — this tool cannot approve or start anything itself.",
+            ["inputSchema"] = new Dictionary<string, object?>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object?>
+                {
+                    ["filename"] = OStr("Job file name as the printer knows it."),
+                    ["design_sha256"] = OStr("Design artifact hash the job came from (64 hex)."),
+                    ["studio_url"] = OStr("AdvancedStudio base URL (default env OBCSLICE_STUDIO or http://127.0.0.1:8770)."),
+                },
+                ["required"] = new List<object?> { "filename" },
+            },
+        },
     };
 
     private static Dictionary<string, object?> OStr(string strDescription) => new()
@@ -92,6 +132,8 @@ public static class Tools
     {
         "slice" => StrSlice(oArgs),
         "stage_for_studio" => StrStage(oArgs),
+        "propose_upload" => StrPropose(oArgs, "gcode_upload"),
+        "propose_print" => StrPropose(oArgs, "print_start"),
         _ => throw new ToolError($"Unknown tool '{strName}'."),
     };
 
@@ -199,9 +241,20 @@ public static class Tools
                 $"sha256(gcode)={strGcodeSha} is not among the record's attested outputs — " +
                 "refusing to stage unattested G-code.");
 
+        // Design anchor for the filename: the ODC design artifact when the record
+        // has one, else the sliced model itself — AdvancedStudio warns on approval
+        // when a filename stops carrying the design hash's first 12 hex chars
+        // (staging.py carries_design_hash), so the name leads with it.
+        string? strDesignSha = null;
+        if (oRoot.GetProperty("inputs").TryGetProperty("design_provenance", out JsonElement oDp)
+            && oDp.ValueKind == JsonValueKind.Object)
+            strDesignSha = StrOpt(oDp, "artifact_sha256");
+        strDesignSha ??= oRoot.GetProperty("inputs").GetProperty("model").GetProperty("sha256").GetString();
+
         Directory.CreateDirectory(strStaging);
         string strRecordSha = SliceRecord.StrHashFile(strRecord);
-        string strGcodeDest = Path.Combine(strStaging, strGcodeSha + ".gcode");
+        string strStagedName = $"{strDesignSha![..12]}-{strGcodeSha[..12]}.gcode";
+        string strGcodeDest = Path.Combine(strStaging, strStagedName);
         string strRecordDest = Path.Combine(strStaging, strRecordSha + ".slice.json");
         File.Copy(strGcode, strGcodeDest, overwrite: true);
         File.Copy(strRecord, strRecordDest, overwrite: true);
@@ -209,10 +262,55 @@ public static class Tools
         return JsonSerializer.Serialize(new Dictionary<string, object?>
         {
             ["staged_gcode"] = strGcodeDest,
+            ["staged_filename"] = strStagedName,
             ["staged_record"] = strRecordDest,
             ["gcode_sha256"] = strGcodeSha,
+            ["design_sha256"] = strDesignSha,
             ["record_sha256"] = strRecordSha,
-            ["next"] = "Propose gcode_upload then print_start in AdvancedStudio; both require human approval.",
+            ["next"] = "Call propose_upload with staged_filename and design_sha256; a human approves in the dashboard.",
         });
+    }
+
+    private static string StrPropose(JsonElement oArgs, string strAction)
+    {
+        string strFilename = StrReq(oArgs, "filename");
+        string? strDesign = StrOpt(oArgs, "design_sha256");
+        string strBase = StrOpt(oArgs, "studio_url")
+            ?? Environment.GetEnvironmentVariable("OBCSLICE_STUDIO")
+            ?? "http://127.0.0.1:8770";
+        string? strToken = Environment.GetEnvironmentVariable("OBCSLICE_STUDIO_TOKEN");
+
+        var oParams = new Dictionary<string, object?> { ["filename"] = strFilename };
+        if (!string.IsNullOrEmpty(strDesign))
+            oParams["design_artifact_sha256"] = strDesign;
+        string strBody = JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["action"] = strAction, ["params"] = oParams,
+        });
+
+        using var oClient = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+        var oRequest = new HttpRequestMessage(HttpMethod.Post, strBase.TrimEnd('/') + "/api/propose")
+        {
+            Content = new StringContent(strBody, System.Text.Encoding.UTF8, "application/json"),
+        };
+        if (!string.IsNullOrEmpty(strToken))
+            oRequest.Headers.Add("X-Studio-Token", strToken);
+
+        HttpResponseMessage oResponse;
+        string strResponseBody;
+        try
+        {
+            oResponse = oClient.Send(oRequest);
+            strResponseBody = new StreamReader(oResponse.Content.ReadAsStream()).ReadToEnd();
+        }
+        catch (HttpRequestException e)
+        {
+            throw new ToolError(
+                $"AdvancedStudio unreachable at {strBase}: {e.Message}. Is studio-core running?");
+        }
+        if (!oResponse.IsSuccessStatusCode)
+            throw new ToolError(
+                $"/api/propose {strAction} refused ({(int)oResponse.StatusCode}): {strResponseBody}");
+        return strResponseBody; // confirmation_id, will_run, message — verbatim from the studio
     }
 }
