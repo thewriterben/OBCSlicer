@@ -43,4 +43,8 @@ Broken / hazards in this build:
 - `--debug N` and `--export-3mf` → C++ exception `0xE06D7363`; `--logfile` accepted but writes nothing.
 - GUI-subsystem exe: console redirection from PowerShell is unreliable; always run with redirected pipes (obcslice does).
 
-Still open: plate numbering under `--arrange 1`; GUI import of obc3mf projects; whether the fork build (vs. official binary) behaves differently on any of the above.
+Still open: plate numbering under `--arrange 1`; whether the fork build (vs. official binary) behaves differently on any of the above.
+
+## K2 Plus CFS lane mapping (first physical print, 2026-08-23)
+
+Tool indices in G-code map to CFS lanes **in order: T0→lane T1A, T1→T1B, …** (lane addressing confirmed in the printer's BOX macro suite, `TNN` params). A job whose tool asks an **empty lane** fails at start G-code with a *filament runout* error — the toolhead sensor correctly never sees filament; the message just doesn't say "lane empty". Diagnosis signature: paused at `virtual_sdcard.file_position` ≈ start-gcode bytes, layer 0, `filament_detected: false`, spools RFID-listed in other lanes (`box.same_material`). Fix: load spools in the first N lanes (A, B, …) to match the job's filament count — or use Creality's own flow, which offers lane remapping at print start. Moonraker-path prints (ours) get no remap prompt.
