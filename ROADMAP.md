@@ -25,7 +25,7 @@ Close the ecosystem's actual gap first: ODC `handoff` stages STL + sidecar to a 
 - [ ] Field→region extraction (threshold/argmax volume fractions → region meshes feeding obc3mf) — needs the Field Engine above
 - [ ] **Fork branch (first real OrcaSlicer_AS change): gated CLI option honoring per-object `extruder` from plain 3MF** — live run showed the official CLI drops it for non-project files even though both importer mechanisms exist in source (MM-3MF.md). Prereq: GUI import check to confirm scope is CLI-only
 - [ ] CFS mapping: region→AMS/CFS slot with purge estimates; degradation (e.g. more regions than slots) reported in the slice record, never silent
-- [ ] BumpMesh headless bridge: textured-mesh preprocessing step with hash chaining (input mesh sha → textured mesh sha in the record)
+- [x] BumpMesh headless bridge: `texturize-cli.mjs` committed to the stlTexturizer repo (GPL side, separate process per ADR-0004) — runs the exact web export pipeline from Node; verified 12-tri cube → 31k-tri watertight mesh → passes obc3mf's closed-mesh gate, exit 0 (2026-08-23). Hash chaining into the compile record: wire when the pipeline caller lands
 - [ ] Print a two-material + textured test artifact; measure region boundary accuracy vs field
 
 ## P3 — Process-parameter grading (first field-driven G-code on owned hardware)

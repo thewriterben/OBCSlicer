@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-08-23 — BumpMesh headless bridge
+
+- `texturize-cli.mjs` added to the stlTexturizer repo (`e1df624`, GPLv3 there, never here): the web app's exact export pipeline driven from Node — STL in, displaced binary STL out, all projection modes, PNG textures, deps pinned to the web importmap's three@0.170.0.
+- Verified in-sandbox: 12-triangle cube + dots texture → 31,174 triangles, 0 open/0 non-manifold edges, and the output passes obc3mf's closed-mesh gate cleanly. Texture → compile → slice pipeline is now three working processes exchanging hashed files.
+
 ## 2026-08-23 — Live run against official OrcaSlicer V2.4.2
 
 - Fetched the official V2.4.2 x64 portable into `.tools/` (gitignored) and ran the pipeline for real on the dev machine.
