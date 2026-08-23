@@ -26,7 +26,7 @@ Toolchain: any .NET SDK ≥ 8 (projects target net8.0; see the csproj note). Zer
 
 ## Status
 
-P1 in progress: `obcslice` (headless slice + slice record) and `obcslicer-mcp` (stdio MCP: `slice`, `stage_for_studio`) are implemented and tested. Remaining before P1 closes: a live run against a built `orca-slicer.exe` with flattened K2 Plus presets, and the AdvancedStudio propose passthrough (needs its source connected). See `ROADMAP.md` and `CHANGELOG.md`.
+P1 mostly done: `obcslice` (headless slice + slice record) and `obcslicer-mcp` (stdio MCP: `slice`, `stage_for_studio`). P2 started: `obc3mf` compiles meshes + filament assignments into fork-native multi-material 3MF projects. Blocked on externals: live runs need a built `orca-slicer.exe`; the propose passthrough needs the AdvancedStudio source connected; the Field Engine needs NuGet (PicoGK). See `ROADMAP.md` and `CHANGELOG.md`.
 
 ## License
 

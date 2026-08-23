@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Compiled-project route (docs/specs/MM-3MF.md): meshes + filament map → 3MF
+       the OrcaSlicer_AS fork reads natively. Zero packages; ZIP and XML come from
+       the BCL. References obcslice for CanonicalJson and file hashing. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Obc3mf</RootNamespace>
+    <AssemblyName>obc3mf</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\obcslice\obcslice.csproj" />
+  </ItemGroup>
+
+</Project>

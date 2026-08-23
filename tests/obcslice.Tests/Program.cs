@@ -209,6 +209,145 @@ public static class Tests
         Assert.True(strRecord.Contains("\"design_provenance\":null"), "design null");
     }
 
+    // ---- obc3mf --------------------------------------------------------------
+
+    /// <summary>Closed tetrahedron as a binary STL: 4 vertices, 4 faces.</summary>
+    private static void WriteTetraStl(string strPath)
+    {
+        var aoV = new (float, float, float)[] { (0, 0, 0), (1, 0, 0), (0, 1, 0), (0, 0, 1) };
+        var aoF = new (int, int, int)[] { (0, 2, 1), (0, 1, 3), (1, 2, 3), (0, 3, 2) };
+        using var oW = new BinaryWriter(File.Create(strPath));
+        oW.Write(new byte[80]);
+        oW.Write((uint)aoF.Length);
+        foreach ((int a, int b, int c) in aoF)
+        {
+            oW.Write(0f); oW.Write(0f); oW.Write(0f); // normal (recomputed by consumers)
+            foreach (int n in new[] { a, b, c })
+            {
+                (float x, float y, float z) = aoV[n];
+                oW.Write(x); oW.Write(y); oW.Write(z);
+            }
+            oW.Write((ushort)0);
+        }
+    }
+
+    public static void StlTetraReadsClosedAndWelded()
+    {
+        string strDir = Directory.CreateTempSubdirectory("obc3mf-stl").FullName;
+        string strStl = Path.Combine(strDir, "tetra.stl");
+        WriteTetraStl(strStl);
+        Obc3mf.IndexedMesh oMesh = Obc3mf.StlReader.Read(strStl);
+        Assert.True(oMesh.Vertices.Count == 4, $"welded to 4 vertices, got {oMesh.Vertices.Count}");
+        Assert.True(oMesh.Triangles.Count == 4, "4 triangles");
+        Assert.True(oMesh.NOpenEdges() == 0, "tetrahedron is closed");
+    }
+
+    public static void StlAsciiSingleTriangleIsOpen()
+    {
+        string strDir = Directory.CreateTempSubdirectory("obc3mf-stl").FullName;
+        string strStl = Path.Combine(strDir, "tri.stl");
+        File.WriteAllText(strStl, """
+            solid tri
+              facet normal 0 0 1
+                outer loop
+                  vertex 0 0 0
+                  vertex 1 0 0
+                  vertex 0 1 0
+                endloop
+              endfacet
+            endsolid tri
+            """);
+        Obc3mf.IndexedMesh oMesh = Obc3mf.StlReader.Read(strStl);
+        Assert.True(oMesh.Triangles.Count == 1, "one triangle parsed");
+        Assert.True(oMesh.NOpenEdges() == 3, "single triangle has 3 open edges");
+    }
+
+    public static void CompileTwoPartProjectAndVerifyArchive()
+    {
+        string strDir = Directory.CreateTempSubdirectory("obc3mf-e2e").FullName;
+        WriteTetraStl(Path.Combine(strDir, "body.stl"));
+        WriteTetraStl(Path.Combine(strDir, "grip.stl"));
+        string strManifest = Path.Combine(strDir, "m.json");
+        File.WriteAllText(strManifest, """
+            { "output": "part.3mf", "parts": [
+              { "mesh": "body.stl", "name": "body", "filament": 1 },
+              { "mesh": "grip.stl", "name": "grip", "filament": 2,
+                "overrides": { "nozzle_temperature": "230" } } ] }
+            """);
+        int nExit = Obc3mf.Program.Main(new[] { "compile", "--manifest", strManifest });
+        Assert.True(nExit == 0, $"compile exit 0, got {nExit}");
+
+        string str3mf = Path.Combine(strDir, "part.3mf");
+        using var oZip = System.IO.Compression.ZipFile.OpenRead(str3mf);
+        foreach (string strEntry in new[] { "[Content_Types].xml", "_rels/.rels",
+            "3D/3dmodel.model", "Metadata/model_settings.config" })
+            Assert.True(oZip.GetEntry(strEntry) is not null, $"archive contains {strEntry}");
+
+        var oModel = new System.Xml.XmlDocument();
+        using (Stream oS = oZip.GetEntry("3D/3dmodel.model")!.Open())
+            oModel.Load(oS);
+        var oNs = new System.Xml.XmlNamespaceManager(oModel.NameTable);
+        oNs.AddNamespace("m", "http://schemas.microsoft.com/3dmanufacturing/core/2015/02");
+        Assert.Equal("millimeter", oModel.SelectSingleNode("/m:model/@unit", oNs)!.Value!);
+        Assert.True(oModel.SelectNodes("//m:object", oNs)!.Count == 2, "two objects");
+        Assert.True(oModel.SelectNodes("//m:object[@id='1']//m:triangle", oNs)!.Count == 4,
+            "object 1 has 4 triangles");
+        Assert.True(oModel.SelectNodes("//m:item", oNs)!.Count == 2, "two build items");
+
+        var oConfig = new System.Xml.XmlDocument();
+        using (Stream oS = oZip.GetEntry("Metadata/model_settings.config")!.Open())
+            oConfig.Load(oS);
+        Assert.Equal("1", oConfig.SelectSingleNode(
+            "/config/object[@id='1']/metadata[@key='extruder']/@value")!.Value!);
+        Assert.Equal("2", oConfig.SelectSingleNode(
+            "/config/object[@id='2']/metadata[@key='extruder']/@value")!.Value!);
+        Assert.Equal("230", oConfig.SelectSingleNode(
+            "/config/object[@id='2']/metadata[@key='nozzle_temperature']/@value")!.Value!);
+
+        string strRecord = File.ReadAllText(str3mf + ".project.json");
+        Assert.True(strRecord.Contains("\"record\":\"obc-project/0.1\""), "compile record schema");
+        Assert.True(strRecord.Contains(SliceRecord.StrHashFile(str3mf)), "record attests 3mf hash");
+        Assert.True(strRecord.Contains("\"degradations\":[]"), "clean compile has empty degradations");
+    }
+
+    public static void CompileRefusesOpenMeshWithoutFlag()
+    {
+        string strDir = Directory.CreateTempSubdirectory("obc3mf-open").FullName;
+        File.WriteAllText(Path.Combine(strDir, "tri.stl"), """
+            solid t
+              facet normal 0 0 1
+                outer loop
+                  vertex 0 0 0
+                  vertex 1 0 0
+                  vertex 0 1 0
+                endloop
+              endfacet
+            endsolid t
+            """);
+        string strManifest = Path.Combine(strDir, "m.json");
+        File.WriteAllText(strManifest,
+            "{ \"output\": \"t.3mf\", \"parts\": [ { \"mesh\": \"tri.stl\", \"filament\": 1 } ] }");
+        Assert.True(Obc3mf.Program.Main(new[] { "compile", "--manifest", strManifest }) == 2,
+            "open mesh refused");
+        Assert.True(Obc3mf.Program.Main(
+            new[] { "compile", "--manifest", strManifest, "--allow-open-mesh" }) == 0,
+            "allowed with flag");
+        Assert.True(File.ReadAllText(Path.Combine(strDir, "t.3mf.project.json"))
+            .Contains("\"open_mesh\""), "degradation recorded");
+    }
+
+    public static void CompileRefusesExtruderOverride()
+    {
+        string strDir = Directory.CreateTempSubdirectory("obc3mf-ov").FullName;
+        WriteTetraStl(Path.Combine(strDir, "a.stl"));
+        string strManifest = Path.Combine(strDir, "m.json");
+        File.WriteAllText(strManifest,
+            "{ \"output\": \"a.3mf\", \"parts\": [ { \"mesh\": \"a.stl\", \"filament\": 1, " +
+            "\"overrides\": { \"extruder\": \"2\" } } ] }");
+        Assert.True(Obc3mf.Program.Main(new[] { "compile", "--manifest", strManifest }) == 2,
+            "extruder override must be refused");
+    }
+
     // ---- MCP server ----------------------------------------------------------
 
     private static System.Text.Json.JsonElement OMcp(string strRequest)

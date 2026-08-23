@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-23 — P2 increment 1: obc3mf multi-material project compiler
+
+- `docs/specs/MM-3MF.md` — archive layout and the `model_settings.config` extruder mechanism, read from the fork's importer/exporter (`bbs_3mf.cpp` L192/L211/L2201/L2271–2291); per-object overrides via the same metadata seam become P3's process-grading target.
+- `src/obc3mf` — zero-dep compiler: manifest → 3MF core-spec geometry (binary/ASCII STL in, exact-weld indexed meshes, mm declared never inferred) + per-object filament/overrides + canonical compile record (`obc-project/0.1`) attesting input and output hashes. Boundary gate: open/non-manifold meshes refused (`--allow-open-mesh` records an `open_mesh` degradation); `extruder` override rejected in favor of `filament`.
+- 5 new tests (archive structure verified by parsing the emitted XML; refusal paths covered). 22/22 total, build clean.
+- Field Engine proper (OpenVDB fields in) stays blocked on NuGet access for PicoGK; obc3mf is the emission half it will feed.
+
 ## 2026-08-23 — P1 increment 2: MCP surface
 
 - `src/obcslicer-mcp` — stdlib-only stdio MCP server (newline-delimited JSON-RPC: initialize / tools/list / tools/call / ping). The official MCP SDK needs NuGet, which the verification sandbox can't reach; the csproj documents swapping to it later with `Tools` unchanged.

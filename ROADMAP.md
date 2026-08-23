@@ -20,8 +20,9 @@ Close the ecosystem's actual gap first: ODC `handoff` stages STL + sidecar to a 
 
 ## P2 — Discrete multi-material + texture pipeline
 
-- [ ] Field Engine skeleton: OpenVDB grid in (SDF + per-material volume fraction), mm + voxel size declared, validation gate, deterministic
-- [ ] Field→region compiler v0: threshold/argmax volume fractions into discrete regions → 3MF project with per-region filament assignment (compiled-project route, RESEARCH.md §2) — no libslic3r changes needed
+- [ ] Field Engine skeleton: OpenVDB grid in (SDF + per-material volume fraction), mm + voxel size declared, validation gate, deterministic — **blocked on NuGet access for PicoGK**
+- [x] 3MF emission half of the compiler: `obc3mf` — manifest (meshes + filament slots + per-object overrides) → fork-native 3MF project + canonical compile record (`obc-project/0.1`); closed-mesh gate (open meshes refused unless flagged, recorded); `docs/specs/MM-3MF.md` cites the importer code it targets. Live GUI import check pending, same blocker as the live slice (2026-08-23)
+- [ ] Field→region extraction (threshold/argmax volume fractions → region meshes feeding obc3mf) — needs the Field Engine above
 - [ ] CFS mapping: region→AMS/CFS slot with purge estimates; degradation (e.g. more regions than slots) reported in the slice record, never silent
 - [ ] BumpMesh headless bridge: textured-mesh preprocessing step with hash chaining (input mesh sha → textured mesh sha in the record)
 - [ ] Print a two-material + textured test artifact; measure region boundary accuracy vs field
