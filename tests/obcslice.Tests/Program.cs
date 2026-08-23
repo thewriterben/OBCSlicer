@@ -269,7 +269,10 @@ public static class Tests
         WriteTetraStl(Path.Combine(strDir, "grip.stl"));
         string strManifest = Path.Combine(strDir, "m.json");
         File.WriteAllText(strManifest, """
-            { "output": "part.3mf", "parts": [
+            { "output": "part.3mf",
+              "printer": { "nozzle_diameter_mm": "0.4", "printable_width_mm": 350,
+                           "printable_depth_mm": 350, "printable_height_mm": 350 },
+              "parts": [
               { "mesh": "body.stl", "name": "body", "filament": 1 },
               { "mesh": "grip.stl", "name": "grip", "filament": 2,
                 "overrides": { "nozzle_temperature": "230" } } ] }
@@ -280,32 +283,64 @@ public static class Tests
         string str3mf = Path.Combine(strDir, "part.3mf");
         using var oZip = System.IO.Compression.ZipFile.OpenRead(str3mf);
         foreach (string strEntry in new[] { "[Content_Types].xml", "_rels/.rels",
-            "3D/3dmodel.model", "Metadata/model_settings.config" })
+            "3D/3dmodel.model", "3D/_rels/3dmodel.model.rels",
+            "3D/Objects/body_1.model", "3D/Objects/grip_3.model",
+            "Metadata/model_settings.config", "Metadata/project_settings.config" })
             Assert.True(oZip.GetEntry(strEntry) is not null, $"archive contains {strEntry}");
 
-        var oModel = new System.Xml.XmlDocument();
+        var oNsTable = new System.Xml.NameTable();
+        var oNs = new System.Xml.XmlNamespaceManager(oNsTable);
+        oNs.AddNamespace("m", "http://schemas.microsoft.com/3dmanufacturing/core/2015/02");
+        oNs.AddNamespace("p", "http://schemas.microsoft.com/3dmanufacturing/production/2015/06");
+
+        var oModel = new System.Xml.XmlDocument(oNsTable);
         using (Stream oS = oZip.GetEntry("3D/3dmodel.model")!.Open())
             oModel.Load(oS);
-        var oNs = new System.Xml.XmlNamespaceManager(oModel.NameTable);
-        oNs.AddNamespace("m", "http://schemas.microsoft.com/3dmanufacturing/core/2015/02");
         Assert.Equal("millimeter", oModel.SelectSingleNode("/m:model/@unit", oNs)!.Value!);
-        Assert.True(oModel.SelectNodes("//m:object", oNs)!.Count == 2, "two objects");
-        Assert.True(oModel.SelectNodes("//m:object[@id='1']//m:triangle", oNs)!.Count == 4,
-            "object 1 has 4 triangles");
+        Assert.Equal("p", oModel.SelectSingleNode("/m:model/@requiredextensions", oNs)!.Value!);
+        Assert.True(oModel.SelectSingleNode(
+            "/m:model/m:metadata[@name='Application']", oNs)!.InnerText.StartsWith("BambuStudio-"),
+            "Application tag present (project identity gate)");
+        // Root model holds component wrappers (even ids) referencing object files, no inline meshes.
+        Assert.True(oModel.SelectNodes("//m:object[m:components]", oNs)!.Count == 2, "two wrapper objects");
+        Assert.True(oModel.SelectNodes("//m:mesh", oNs)!.Count == 0, "no inline meshes in root");
+        Assert.Equal("/3D/Objects/grip_3.model", oModel.SelectSingleNode(
+            "//m:object[@id='4']//m:component/@p:path", oNs)!.Value!);
         Assert.True(oModel.SelectNodes("//m:item", oNs)!.Count == 2, "two build items");
+
+        var oObj = new System.Xml.XmlDocument(oNsTable);
+        using (Stream oS = oZip.GetEntry("3D/Objects/body_1.model")!.Open())
+            oObj.Load(oS);
+        Assert.True(oObj.SelectNodes("//m:object[@id='1']//m:triangle", oNs)!.Count == 4,
+            "mesh object 1 has 4 triangles");
 
         var oConfig = new System.Xml.XmlDocument();
         using (Stream oS = oZip.GetEntry("Metadata/model_settings.config")!.Open())
             oConfig.Load(oS);
+        // model_settings objects use the WRAPPER ids (2, 4).
         Assert.Equal("1", oConfig.SelectSingleNode(
-            "/config/object[@id='1']/metadata[@key='extruder']/@value")!.Value!);
-        Assert.Equal("2", oConfig.SelectSingleNode(
             "/config/object[@id='2']/metadata[@key='extruder']/@value")!.Value!);
+        Assert.Equal("2", oConfig.SelectSingleNode(
+            "/config/object[@id='4']/metadata[@key='extruder']/@value")!.Value!);
         Assert.Equal("230", oConfig.SelectSingleNode(
-            "/config/object[@id='2']/metadata[@key='nozzle_temperature']/@value")!.Value!);
+            "/config/object[@id='4']/metadata[@key='nozzle_temperature']/@value")!.Value!);
+        Assert.Equal("1 1", oConfig.SelectSingleNode(
+            "/config/plate/metadata[@key='filament_maps']/@value")!.Value!);
+        Assert.True(oConfig.SelectNodes("/config/plate/model_instance")!.Count == 2, "plate instances");
+        Assert.True(oConfig.SelectNodes("/config/assemble/assemble_item")!.Count == 2, "assemble items");
+
+        using (Stream oS = oZip.GetEntry("Metadata/project_settings.config")!.Open())
+        using (var oPs = System.Text.Json.JsonDocument.Parse(oS))
+        {
+            Assert.True(oPs.RootElement.GetProperty("filament_colour").GetArrayLength() == 2,
+                "filament arrays sized to slot count");
+            Assert.Equal("350", oPs.RootElement.GetProperty("printable_height").GetString()!);
+            Assert.Equal("0.4", oPs.RootElement.GetProperty("nozzle_diameter")[0].GetString()!);
+        }
 
         string strRecord = File.ReadAllText(str3mf + ".project.json");
-        Assert.True(strRecord.Contains("\"record\":\"obc-project/0.1\""), "compile record schema");
+        Assert.True(strRecord.Contains("\"record\":\"obc-project/0.2\""), "compile record schema");
+        Assert.True(strRecord.Contains("\"structure\":\"orca-project\""), "structure recorded");
         Assert.True(strRecord.Contains(SliceRecord.StrHashFile(str3mf)), "record attests 3mf hash");
         Assert.True(strRecord.Contains("\"degradations\":[]"), "clean compile has empty degradations");
     }
@@ -326,7 +361,9 @@ public static class Tests
             """);
         string strManifest = Path.Combine(strDir, "m.json");
         File.WriteAllText(strManifest,
-            "{ \"output\": \"t.3mf\", \"parts\": [ { \"mesh\": \"tri.stl\", \"filament\": 1 } ] }");
+            "{ \"output\": \"t.3mf\", \"printer\": { \"nozzle_diameter_mm\": \"0.4\", " +
+            "\"printable_width_mm\": 350, \"printable_depth_mm\": 350, \"printable_height_mm\": 350 }, " +
+            "\"parts\": [ { \"mesh\": \"tri.stl\", \"filament\": 1 } ] }");
         Assert.True(Obc3mf.Program.Main(new[] { "compile", "--manifest", strManifest }) == 2,
             "open mesh refused");
         Assert.True(Obc3mf.Program.Main(
@@ -342,10 +379,23 @@ public static class Tests
         WriteTetraStl(Path.Combine(strDir, "a.stl"));
         string strManifest = Path.Combine(strDir, "m.json");
         File.WriteAllText(strManifest,
-            "{ \"output\": \"a.3mf\", \"parts\": [ { \"mesh\": \"a.stl\", \"filament\": 1, " +
+            "{ \"output\": \"a.3mf\", \"printer\": { \"nozzle_diameter_mm\": \"0.4\", " +
+            "\"printable_width_mm\": 350, \"printable_depth_mm\": 350, \"printable_height_mm\": 350 }, " +
+            "\"parts\": [ { \"mesh\": \"a.stl\", \"filament\": 1, " +
             "\"overrides\": { \"extruder\": \"2\" } } ] }");
         Assert.True(Obc3mf.Program.Main(new[] { "compile", "--manifest", strManifest }) == 2,
             "extruder override must be refused");
+    }
+
+    public static void CompileRefusesMissingPrinterBlock()
+    {
+        string strDir = Directory.CreateTempSubdirectory("obc3mf-nopr").FullName;
+        WriteTetraStl(Path.Combine(strDir, "a.stl"));
+        string strManifest = Path.Combine(strDir, "m.json");
+        File.WriteAllText(strManifest,
+            "{ \"output\": \"a.3mf\", \"parts\": [ { \"mesh\": \"a.stl\", \"filament\": 1 } ] }");
+        Assert.True(Obc3mf.Program.Main(new[] { "compile", "--manifest", strManifest }) == 2,
+            "missing printer block must be refused — machine facts are never defaulted");
     }
 
     // ---- MCP server ----------------------------------------------------------

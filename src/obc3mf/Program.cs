@@ -15,8 +15,14 @@ public static class Program
         obc3mf compile --manifest FILE [--allow-open-mesh]
 
         Manifest: { "output": "part.3mf",
+                    "printer": { "nozzle_diameter_mm": "0.4",
+                                 "printable_width_mm": 350, "printable_depth_mm": 350,
+                                 "printable_height_mm": 350 },
                     "parts": [ { "mesh": "a.stl", "name": "body", "filament": 1,
                                  "overrides": { "nozzle_temperature": "230" } }, ... ] }
+
+        The printer block is required: project emission embeds machine facts and
+        this tool never invents physical data.
         Writes the 3MF and <output>.project.json (canonical, obc-project/0.1).
         Exit codes: 0 ok · 2 invalid manifest/mesh (open meshes refuse without --allow-open-mesh).
         """;
@@ -72,6 +78,20 @@ public static class Program
         if (!oRoot.TryGetProperty("parts", out JsonElement oParts)
             || oParts.ValueKind != JsonValueKind.Array || oParts.GetArrayLength() == 0)
             throw new InvalidDataException("Manifest needs a non-empty \"parts\" array.");
+
+        if (!oRoot.TryGetProperty("printer", out JsonElement oPr) || oPr.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException(
+                "Manifest needs a \"printer\" block (nozzle_diameter_mm, printable_width_mm, " +
+                "printable_depth_mm, printable_height_mm) — machine facts are never defaulted.");
+        string StrPr(string strKey) => oPr.TryGetProperty(strKey, out JsonElement o)
+            && o.ValueKind == JsonValueKind.String && o.GetString() is string s && s.Length > 0
+            ? s : throw new InvalidDataException($"printer.{strKey} must be a non-empty string.");
+        int NPr(string strKey) => oPr.TryGetProperty(strKey, out JsonElement o)
+            && o.ValueKind == JsonValueKind.Number && o.GetInt32() > 0
+            ? o.GetInt32() : throw new InvalidDataException($"printer.{strKey} must be a positive integer (mm).");
+        var oPrinter = new ThreeMfWriter.PrinterSpec(
+            StrPr("nozzle_diameter_mm"),
+            NPr("printable_width_mm"), NPr("printable_depth_mm"), NPr("printable_height_mm"));
 
         var aDegradations = new List<Degradation>();
         var aParts = new List<ThreeMfWriter.Part>();
@@ -130,11 +150,19 @@ public static class Program
             });
         }
 
-        ThreeMfWriter.Write(strOutput, aParts);
+        ThreeMfWriter.Write(strOutput, aParts, oPrinter);
 
         var oRecord = new Dictionary<string, object?>
         {
-            ["record"] = "obc-project/0.1",
+            ["record"] = "obc-project/0.2",
+            ["structure"] = "orca-project",
+            ["printer"] = new Dictionary<string, object?>
+            {
+                ["nozzle_diameter_mm"] = oPrinter.StrNozzleDiameterMm,
+                ["printable_width_mm"] = oPrinter.NPrintableWidthMm,
+                ["printable_depth_mm"] = oPrinter.NPrintableDepthMm,
+                ["printable_height_mm"] = oPrinter.NPrintableHeightMm,
+            },
             ["created_utc"] = DateTime.UtcNow.ToString(
                 "yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
             ["units"] = "mm",

@@ -1,4 +1,41 @@
-# Multi-material 3MF project — what obc3mf emits (v0.1)
+# Multi-material 3MF project — what obc3mf emits
+
+> **v0.2 (2026-08-23): SOLVED.** Plain core-spec 3MF (v0.1 below) imports as geometry-only —
+> Orca honors per-object extruders only for its own project structure. The minimal sufficient
+> structure was established empirically (GUI-saved reference from Benji + delta-debugging
+> against OrcaSlicer V2.4.2) and obc3mf now emits it. **Live-verified: obc3mf project →
+> headless slice → 50 toolchanges (`T1`) in the G-code.** See "Validated minimal project
+> structure" below; v0.1 sections are kept for the core-spec geometry details that still apply.
+
+## Validated minimal project structure (v0.2)
+
+```
+[Content_Types].xml               rels + model types only
+_rels/.rels                       → 3D/3dmodel.model only (thumbnail rels droppable)
+3D/3dmodel.model                  production ext (requiredextensions="p"), Application tag
+                                  "BambuStudio-02.06.00.51" + OrcaSlicer version tag +
+                                  BambuStudio:3mfVersion=1; objects are component WRAPPERS
+                                  (even ids 2,4,…) with p:UUID + p:path → per-object files;
+                                  build items with p:UUIDs, printable=1, auto_drop=1
+3D/_rels/3dmodel.model.rels       → the object files
+3D/Objects/<name>_<odd>.model     one per part: inline mesh, odd ids (1,3,…), version meta
+Metadata/model_settings.config    objects keyed by WRAPPER id: name + extruder + overrides +
+                                  <part id=odd> (name, identity matrix); <plate> block
+                                  (plater_id, filament_map_mode "Auto For Flush",
+                                  filament_maps sized to slot count, model_instance entries);
+                                  <assemble> block
+Metadata/project_settings.config  the 22-key minimal set (below)
+```
+
+Droppable (verified): all thumbnail PNGs and their rels/metadata refs, `slice_info.config`, `filament_sequence.json`. **Not droppable:** `project_settings.config` — its absence (or an empty `{}`) hard-crashes the CLI (0xC0000005).
+
+**The 22-key `project_settings.config`** (delta-debugged 653 → 22): filament arrays sized to slot count with inert values (`filament_colour` display palette, `filament_colour_type`, `filament_deretraction_speed` "nil", `filament_diameter` "1.75", `filament_ironing_{inset,spacing,speed}` "nil", `filament_is_support` "0", `filament_settings_id` "", `filament_shrink`/`filament_shrinkage_compensation_z` "100%", `filament_tower_interface_pre_extrusion_length` "0"), plus `notes`, `nozzle_diameter`, `print_sequence` "by layer", `print_settings_id` "", `printable_area`/`printable_height` (**from the manifest's required `printer` block — machine facts are never invented**), `printer_agent` "", `printer_extruder_id` ["1"], `printer_settings_id` "", `printer_structure` "undefine". Identity fields are deliberately empty: populating `print/printer_settings_id` with preset names triggered a crashing preset-matching path. Real filament data is loaded from profiles at slice time (`--load-filaments`), which is why inert values are honest here — use **distinct** filament profiles per slot, since BBL-project loading maps identical ones to a single filament.
+
+**Harness caveat:** the V2.4.2 GUI-subsystem exe is flaky under some process harnesses (PowerShell console redirect, occasionally python subprocess) while consistently fine under obcslice's redirected-pipe invocation — validate through obcslice, nothing else.
+
+---
+
+# v0.1 reference (core-spec geometry; superseded for emission)
 
 The compiled-project route (RESEARCH.md §2): discrete multi-material without touching libslic3r. obc3mf takes N meshes with filament-slot assignments and emits a 3MF the fork already knows how to read. Facts below cite fork source at `542cd18d19`.
 

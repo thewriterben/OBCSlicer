@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-23 — Multi-material toolchanges: solved (obc3mf v0.2)
+
+- Root cause confirmed via GUI check: Orca honors per-object extruders only for its own project files. Reverse-engineered the minimal sufficient structure from a GUI-saved reference (thanks Benji) by ablation + delta-debugging: thumbnails/slice-info droppable, `project_settings.config` mandatory, 653 → **22 keys**, identity fields must stay empty (preset-name matching crashes), machine facts must come from the caller.
+- obc3mf v0.2: emits the validated project structure (production-extension wrappers, per-object model files, plate/assemble blocks, 22-key scaffold); manifest gains a **required `printer` block** — machine facts are never defaulted; compile record now `obc-project/0.2` with structure + printer recorded. Deterministic UUIDs keep output byte-stable.
+- **Live acceptance: real obc3mf output → obcslice → 50 × `T1` toolchanges in K2 Plus G-code.** The discrete multi-material path works on stock OrcaSlicer — no fork changes needed; the planned fork branch is superseded.
+- 23/23 tests; findings (incl. CLI harness flakiness and the identical-filament collapse trap) recorded in MM-3MF.md.
+
 ## 2026-08-23 — BumpMesh headless bridge
 
 - `texturize-cli.mjs` added to the stlTexturizer repo (`e1df624`, GPLv3 there, never here): the web app's exact export pipeline driven from Node — STL in, displaced binary STL out, all projection modes, PNG textures, deps pinned to the web importmap's three@0.170.0.
