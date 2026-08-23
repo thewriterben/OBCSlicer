@@ -12,7 +12,7 @@ Same rule as ODC: this file exists so scope questions have an answer other than 
 
 Close the ecosystem's actual gap first: ODC `handoff` stages STL + sidecar to a workspace, then a human slices in a GUI and provenance dies there.
 
-- [x] CLI contract documented from fork source (`docs/specs/ORCA-CLI.md`); **build on this machine + live invocation check still pending** (2026-08-23)
+- [x] CLI contract documented from fork source (`docs/specs/ORCA-CLI.md`) and **verified live** against official V2.4.2 portable (auto-fetched to `.tools/`): ODC artifact + sidecar → G-code + slice record, exit 0. Live-run hazards recorded in the spec (2026-08-23)
 - [x] `obcslice` wrapper: mesh + profiles + design sidecar in → G-code + **slice record** out; sidecar↔model hash verified before slicing, refuse on mismatch; 12 tests green (2026-08-23)
 - [x] Slice record schema v0.1 (`docs/specs/SLICE-RECORD.md`), media type `application/vnd.obc.slice+json`, byte-compatible with ODC/BINGO `canonical_json` — checked against Python reference (2026-08-23)
 - [x] MCP surface (`obcslicer-mcp`, stdlib-only stdio JSON-RPC): `slice` (executes — writes only its own outdir) + `stage_for_studio` (hash-named staging; refuses failed/dry-run/unattested records). Propose passthroughs deliberately deferred: AdvancedStudio's `/api/propose` schema must be read from its source, not inferred — connect that folder to wire it (2026-08-23)
@@ -23,6 +23,7 @@ Close the ecosystem's actual gap first: ODC `handoff` stages STL + sidecar to a 
 - [ ] Field Engine skeleton: OpenVDB grid in (SDF + per-material volume fraction), mm + voxel size declared, validation gate, deterministic — **blocked on NuGet access for PicoGK**
 - [x] 3MF emission half of the compiler: `obc3mf` — manifest (meshes + filament slots + per-object overrides) → fork-native 3MF project + canonical compile record (`obc-project/0.1`); closed-mesh gate (open meshes refused unless flagged, recorded); `docs/specs/MM-3MF.md` cites the importer code it targets. Live GUI import check pending, same blocker as the live slice (2026-08-23)
 - [ ] Field→region extraction (threshold/argmax volume fractions → region meshes feeding obc3mf) — needs the Field Engine above
+- [ ] **Fork branch (first real OrcaSlicer_AS change): gated CLI option honoring per-object `extruder` from plain 3MF** — live run showed the official CLI drops it for non-project files even though both importer mechanisms exist in source (MM-3MF.md). Prereq: GUI import check to confirm scope is CLI-only
 - [ ] CFS mapping: region→AMS/CFS slot with purge estimates; degradation (e.g. more regions than slots) reported in the slice record, never silent
 - [ ] BumpMesh headless bridge: textured-mesh preprocessing step with hash chaining (input mesh sha → textured mesh sha in the record)
 - [ ] Print a two-material + textured test artifact; measure region boundary accuracy vs field

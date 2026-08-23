@@ -29,8 +29,18 @@ orca-slicer [model files: 3mf/stl/step/obj]
 3. **Determinism not promised** by the fork (TBB parallelism) — slice records are *attestations* (RESEARCH.md §5).
 4. Windows binary: `orca-slicer.exe` in the install dir; point obcslice at it with `--slicer` or `OBCSLICE_ORCA` env.
 
-## Open (verify when a built binary exists on this machine)
+## Live-run findings (official V2.4.2 x64 portable, 2026-08-23)
 
-- Whether `--load-settings` accepts absolute Windows paths with spaces un-escaped (quote the whole semicolon list).
-- Plate numbering when `--arrange 1` re-plates objects.
-- Whether K2 Plus profiles flatten cleanly (no `inherits` leftovers) via GUI export.
+Verified working:
+- Full chain: ODC artifact STL + verified design sidecar → `obcslice` → `plate_1.gcode` (27 layers) + slice record, exit 0.
+- Absolute Windows paths with spaces work when passed as separate argv entries (`ProcessStartInfo.ArgumentList`); no manual quoting.
+- `inherits` presets **are resolved by the CLI** when run from the portable install (resources sit next to the exe) — caveat 1 softens to: unflattened profiles slice fine but make the attestation depend on the resources tree, so the degradation stays.
+- obc3mf-emitted 3MF: geometry accepted, both objects sliced (100 layers, correct volume).
+
+Broken / hazards in this build:
+- **Per-object extruder assignment is not honored for non-project 3MF**: neither `model_settings.config` metadata nor core-spec `basematerials` color groups produced a `T1` (source-verified both importer paths exist; the value is lost in the CLI slicing path). Definitive GUI check pending; candidate fork work: a gated option honoring `extruder` metadata from plain 3MF.
+- Claiming the BBL `Application` tag without full plate structure → hard crash `0xC0000005`.
+- `--debug N` and `--export-3mf` → C++ exception `0xE06D7363`; `--logfile` accepted but writes nothing.
+- GUI-subsystem exe: console redirection from PowerShell is unreliable; always run with redirected pipes (obcslice does).
+
+Still open: plate numbering under `--arrange 1`; GUI import of obc3mf projects; whether the fork build (vs. official binary) behaves differently on any of the above.

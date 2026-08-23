@@ -59,5 +59,7 @@ Each mesh must be non-empty and closed: after welding, every edge shared by exac
 
 ## Verified against / still open
 
-- Structure and metadata semantics read from the fork's importer/exporter (cited above); a **live import into the Orca GUI is still pending** — same blocker as the live slice run.
+- Structure and metadata semantics read from the fork's importer/exporter (cited above).
+- **Live CLI result (official 2.4.2, 2026-08-23): geometry imports and slices correctly (both objects), but per-object `extruder` does not reach the G-code** — no `T1` emitted, via either this spec's metadata mechanism or a core-spec `basematerials` color-group variant. The importer paths exist in source; the assignment is lost in the CLI slicing path for non-project files. See ORCA-CLI.md live-run findings.
+- Consequences: (a) definitive acceptance test is a GUI import — open an obc3mf 3MF in Orca and check the grip shows filament 2; (b) queued fork branch: gated option honoring `extruder` metadata from plain 3MF in CLI slicing — the first real OrcaSlicer_AS change, exactly the small gated kind ADR-0001 planned; (c) fallback documented but not chosen: emit the full BBL project structure (plate JSONs, Objects/, slice info) — heavier, schema reverse-engineering, and claiming the `Application` tag without it hard-crashes (0xC0000005).
 - Painted/per-face multi-material (`paint_color` triangle attributes) and per-volume (`<part>`) assignment: deliberately out of v0.1; objects-as-regions is the field-engine contract anyway.

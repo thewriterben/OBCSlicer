@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-23 — Live run against official OrcaSlicer V2.4.2
+
+- Fetched the official V2.4.2 x64 portable into `.tools/` (gitignored) and ran the pipeline for real on the dev machine.
+- **Proven end to end**: ODC scan-cradle artifact + its provenance sidecar (hash verified) → `obcslice` → 242 KB `plate_1.gcode` (27 layers, ~5 min) + slice record, exit 0. First complete design→slice provenance chain.
+- obc3mf project: geometry accepted, both objects sliced. **But per-object extruder does not reach G-code in this CLI** — verified via two independent mechanisms (model_settings metadata; basematerials color groups), both present in importer source, both dropped downstream. Stopped at two strikes; findings + next steps in MM-3MF.md and ORCA-CLI.md (GUI check, then a gated fork branch honoring `extruder` for plain 3MFs).
+- CLI hazards recorded: `--debug`/`--export-3mf` crash (0xE06D7363), fake BBL tag without plate data crashes (0xC0000005), `--logfile` writes nothing, GUI-subsystem console quirks. `inherits` presets resolve when resources sit next to the exe.
+
 ## 2026-08-23 — P2 increment 1: obc3mf multi-material project compiler
 
 - `docs/specs/MM-3MF.md` — archive layout and the `model_settings.config` extruder mechanism, read from the fork's importer/exporter (`bbs_3mf.cpp` L192/L211/L2201/L2271–2291); per-object overrides via the same metadata seam become P3's process-grading target.
