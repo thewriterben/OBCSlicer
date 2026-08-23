@@ -15,7 +15,7 @@ public sealed record FieldSpec
     public required IReadOnlyList<Band> Bands { get; init; }
     public required JsonElement OPrinter { get; init; }       // passed through to the manifest
 
-    public sealed record Band(int NFilament, float? FUpToMm);
+    public sealed record Band(int NFilament, float? FUpToMm, IReadOnlyDictionary<string, string> Overrides);
 
     public static FieldSpec OParse(string strSpecPath)
     {
@@ -98,7 +98,24 @@ public sealed record FieldSpec
                         $"of 2 voxels ({2 * fVoxel:F3} mm). Use a finer voxel size or thicker bands.");
                 fPrev = fCur;
             }
-            aBands.Add(new Band(oFil.GetInt32(), fUpTo));
+            // Per-band process overrides: any string-valued slicer key (this is the
+            // P3 process-grading seam — e.g. sparse_infill_density per band).
+            var oOverrides = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (oBand.TryGetProperty("overrides", out JsonElement oOv))
+            {
+                if (oOv.ValueKind != JsonValueKind.Object)
+                    throw new InvalidDataException($"Band {nIndex}: overrides must be an object.");
+                foreach (JsonProperty oProp in oOv.EnumerateObject())
+                {
+                    if (oProp.Name is "extruder" or "filament")
+                        throw new InvalidDataException(
+                            $"Band {nIndex}: material comes from \"filament\", never an override.");
+                    oOverrides[oProp.Name] = oProp.Value.GetString()
+                        ?? throw new InvalidDataException(
+                            $"Band {nIndex}: override '{oProp.Name}' must be a string value.");
+                }
+            }
+            aBands.Add(new Band(oFil.GetInt32(), fUpTo, oOverrides));
         }
 
         if (!oRoot.TryGetProperty("printer", out JsonElement oPrinter) || oPrinter.ValueKind != JsonValueKind.Object)

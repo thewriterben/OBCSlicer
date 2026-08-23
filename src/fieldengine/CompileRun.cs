@@ -26,7 +26,7 @@ public static class CompileRun
         string strPicoGk = typeof(PicoGK.Library).Assembly.GetName().Version?.ToString() ?? "unknown";
 
         int nAxis = oSpec.StrAxis switch { "x" => 0, "y" => 1, _ => 2 };
-        var aRegionFiles = new List<(string StrPath, string StrSha, int NFilament, int NTriangles)>();
+        var aRegionFiles = new List<(string StrPath, string StrSha, FieldSpec.Band OBand, int NTriangles)>();
 
         using (Library oLib = new(oSpec.FVoxelSizeMm))
         {
@@ -94,32 +94,36 @@ public static class CompileRun
                 // are offset/scale with sane defaults — passing 0 scale zeroes the mesh.
                 mshRegion.SaveToStlFile(strRegionPath, Mesh.EStlUnit.MM);
                 aRegionFiles.Add((strRegionPath, SliceRecord.StrHashFile(strRegionPath),
-                    oBand.NFilament, mshRegion.nTriangleCount()));
+                    oBand, mshRegion.nTriangleCount()));
             }
         }
 
         if (aRegionFiles.Count == 0)
             throw new InvalidDataException("No band produced any region — nothing to print.");
-        if (aRegionFiles.Select(r => r.NFilament).Distinct().Count() < 2)
+        if (aRegionFiles.Select(r => r.OBand.NFilament).Distinct().Count() < 2
+            && aRegionFiles.All(r => r.OBand.Overrides.Count == 0))
             aDegradations.Add(new Degradation("single_material",
-                "All surviving regions use one filament; the result is effectively single-material."));
+                "All surviving regions use one filament with no process overrides; " +
+                "the result is effectively uniform."));
 
         // obc3mf manifest (v0.2 shape: printer block passed through verbatim).
         // assembly:true — stacked bands overlap in XY and must be volumes of one object.
-        var oSbManifest = new StringBuilder();
-        oSbManifest.Append("{ \"output\": \"field.3mf\", \"assembly\": true, \"printer\": ")
-            .Append(oSpec.OPrinter.GetRawText()).Append(", \"parts\": [");
-        for (int i = 0; i < aRegionFiles.Count; i++)
+        var oManifest = new Dictionary<string, object?>
         {
-            if (i > 0) oSbManifest.Append(", ");
-            oSbManifest.Append("{ \"mesh\": \"").Append(Path.GetFileName(aRegionFiles[i].StrPath))
-                .Append("\", \"name\": \"").Append(Path.GetFileNameWithoutExtension(aRegionFiles[i].StrPath))
-                .Append("\", \"filament\": ").Append(aRegionFiles[i].NFilament.ToString(CultureInfo.InvariantCulture))
-                .Append(" }");
-        }
-        oSbManifest.Append(" ] }");
+            ["output"] = "field.3mf",
+            ["assembly"] = true,
+            ["printer"] = System.Text.Json.JsonSerializer.Deserialize<object>(oSpec.OPrinter.GetRawText()),
+            ["parts"] = aRegionFiles.Select(r => (object?)new Dictionary<string, object?>
+            {
+                ["mesh"] = Path.GetFileName(r.StrPath),
+                ["name"] = Path.GetFileNameWithoutExtension(r.StrPath),
+                ["filament"] = r.OBand.NFilament,
+                ["overrides"] = r.OBand.Overrides,
+            }).ToList(),
+        };
         string strManifestPath = Path.Combine(strOutDir, "manifest.json");
-        File.WriteAllText(strManifestPath, oSbManifest.ToString());
+        File.WriteAllText(strManifestPath,
+            System.Text.Json.JsonSerializer.Serialize(oManifest));
 
         // Field record — canonical, deterministic, timestamp-free (like ODC sidecars).
         var oBandsRecord = new List<object?>();
@@ -129,6 +133,8 @@ public static class CompileRun
                 ["filament"] = oSpec.Bands[i].NFilament,
                 ["up_to_mm"] = oSpec.Bands[i].FUpToMm is float f
                     ? f.ToString("F3", CultureInfo.InvariantCulture) : null,
+                ["overrides"] = oSpec.Bands[i].Overrides
+                    .ToDictionary(kv => kv.Key, kv => (object?)kv.Value),
             });
         var oRecord = new Dictionary<string, object?>
         {
@@ -150,7 +156,7 @@ public static class CompileRun
             {
                 ["name"] = Path.GetFileName(r.StrPath),
                 ["sha256"] = r.StrSha,
-                ["filament"] = r.NFilament,
+                ["filament"] = r.OBand.NFilament,
                 ["triangles"] = r.NTriangles,
             }).ToList(),
             ["manifest_sha256"] = SliceRecord.StrHashFile(strManifestPath),

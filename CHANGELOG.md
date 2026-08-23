@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-23 — P3: per-band process overrides, functionally graded infill live
+
+- Field spec bands accept `overrides` (any string-valued slicer key; `extruder`/`filament` refused — material comes from `filament`). They flow: field spec → manifest parts → obc3mf per-`<part>` metadata → Orca applies per-volume.
+- **Live: single-filament cube with `sparse_infill_density` 80% below z=10mm and 10% above → 2.94× extrusion ratio across the boundary.** Functionally graded density on stock hardware, no toolchange, no fork changes — the first FGM-class result of the project.
+- Scope caveat recorded: per-volume overrides cover region-scope settings only; temperature grading goes via distinct filament slots with different-temp profiles.
+- Manifest emission moved to System.Text.Json (proper escaping). 24/24 tests (assembly per-part override covered).
+
 ## 2026-08-23 — AdvancedStudio propose passthrough, live
 
 - Contract read from the real source (`studio-core`: guard.py's propose-only Guard, staging.py's bounded resolve + `carries_design_hash`, app.py's `/api/propose` handlers) — no inference.

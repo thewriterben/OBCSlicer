@@ -42,6 +42,10 @@ The Field Engine's input and record formats. The engine compiles a material fiel
              └► obcslice → G-code + slice record → staging → human-approved print
 ```
 
+## Per-band process overrides (P3, live-verified)
+
+Bands accept `"overrides": { "<slicer key>": "<string value>" }`, flowing into the manifest parts and obc3mf's per-`<part>` metadata, which Orca applies per-volume. **Live result (2026-08-23): single-filament cube, `sparse_infill_density` 80% below z=10mm / 10% above → 2.94× extrusion ratio across the boundary — functionally graded density on stock hardware, no toolchange.** `extruder`/`filament` are refused as overrides — material comes from `filament`. Caveat: only region-scope (per-volume) slicer settings apply; filament-scope settings (temperatures) do not ride per-part metadata — grade those via distinct filament slots with different profiles instead.
+
 ## Deferred
 
-`vdb_grid` field type (OpenVDB volume-fraction grids in — PicoGK's `voxFromVdbFile` is the seam; this is where OpenVCAD output plugs in) · per-band process overrides (P3 temperature grading rides the same `<part>` metadata) · non-axis fields (radial, mesh-distance) · fractional/dithered boundaries.
+`vdb_grid` field type (OpenVDB volume-fraction grids in — PicoGK's `voxFromVdbFile` is the seam; this is where OpenVCAD output plugs in) · non-axis fields (radial, mesh-distance) · fractional/dithered boundaries.

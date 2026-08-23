@@ -30,8 +30,8 @@ Close the ecosystem's actual gap first: ODC `handoff` stages STL + sidecar to a 
 
 ## P3 — Process-parameter grading (first field-driven G-code on owned hardware)
 
-- [ ] Scalar process fields (temperature, flow, speed) → per-region parameter overrides in compiled projects
-- [ ] Fork branch: gated option consuming per-region temperature overrides cleanly (purge/ordering per the 2025 paper's region strategy)
+- [x] Per-band process overrides → per-region parameter overrides in compiled projects — **live-verified: graded infill density (80%→10% at z=10mm, 2.94× extrusion ratio), single filament, stock hardware, no fork changes** (FIELD-SPEC.md, 2026-08-23). Caveat recorded: per-volume overrides cover region-scope settings; filament-scope (temperature) grades via distinct filament slots instead
+- [ ] Temperature grading via per-band filament slots mapped to same-material different-temp profiles (the 2025 paper's foaming case) — needs a spool of temperature-responsive filament to be worth validating
 - [ ] Validation target: temperature-responsive foaming filament density gradient on the K2 (single material, stock hardware — the paper's third case)
 
 ## P4 — Ecosystem depth

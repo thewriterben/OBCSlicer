@@ -356,7 +356,8 @@ public static class Tests
               "printer": { "nozzle_diameter_mm": "0.4", "printable_width_mm": 350,
                            "printable_depth_mm": 350, "printable_height_mm": 350 },
               "parts": [
-              { "mesh": "lower.stl", "name": "lower", "filament": 1 },
+              { "mesh": "lower.stl", "name": "lower", "filament": 1,
+                "overrides": { "sparse_infill_density": "80%" } },
               { "mesh": "upper.stl", "name": "upper", "filament": 2 } ] }
             """);
         Assert.True(Obc3mf.Program.Main(new[] { "compile", "--manifest", strManifest }) == 0,
@@ -383,6 +384,9 @@ public static class Tests
             "/config/object/part[@id='1']/metadata[@key='extruder']/@value")!.Value!);
         Assert.Equal("2", oConfig.SelectSingleNode(
             "/config/object/part[@id='3']/metadata[@key='extruder']/@value")!.Value!);
+        // Per-part process overrides ride the same metadata seam (P3 grading).
+        Assert.Equal("80%", oConfig.SelectSingleNode(
+            "/config/object/part[@id='1']/metadata[@key='sparse_infill_density']/@value")!.Value!);
         Assert.True(oConfig.SelectNodes("/config/plate/model_instance")!.Count == 1,
             "single plate instance");
         string strRecord = File.ReadAllText(Path.Combine(strDir, "asm.3mf.project.json"));
