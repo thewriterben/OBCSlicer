@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The Field Engine: material fields compiled to discrete regions
+       (ARCHITECTURE.md). net9.0 + PicoGK, matching OpenDesignCore's pinned
+       stack — NOT in OBCSlicer.sln because building it needs the PicoGK native
+       runtime and NuGet cache, which the sandbox that verifies the net8.0
+       projects does not have. Use FieldEngine.sln; verified on the dev
+       machine, where ODC already runs this exact stack. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <RootNamespace>FieldEngine</RootNamespace>
+    <AssemblyName>fieldengine</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="PicoGK" Version="[2.2.0]" />
+    <ProjectReference Include="..\obcslice\obcslice.csproj" />
+  </ItemGroup>
+
+</Project>

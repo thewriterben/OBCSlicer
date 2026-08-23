@@ -345,6 +345,51 @@ public static class Tests
         Assert.True(strRecord.Contains("\"degradations\":[]"), "clean compile has empty degradations");
     }
 
+    public static void CompileAssemblyModeStructure()
+    {
+        string strDir = Directory.CreateTempSubdirectory("obc3mf-asm").FullName;
+        WriteTetraStl(Path.Combine(strDir, "lower.stl"));
+        WriteTetraStl(Path.Combine(strDir, "upper.stl"));
+        string strManifest = Path.Combine(strDir, "m.json");
+        File.WriteAllText(strManifest, """
+            { "output": "asm.3mf", "assembly": true,
+              "printer": { "nozzle_diameter_mm": "0.4", "printable_width_mm": 350,
+                           "printable_depth_mm": 350, "printable_height_mm": 350 },
+              "parts": [
+              { "mesh": "lower.stl", "name": "lower", "filament": 1 },
+              { "mesh": "upper.stl", "name": "upper", "filament": 2 } ] }
+            """);
+        Assert.True(Obc3mf.Program.Main(new[] { "compile", "--manifest", strManifest }) == 0,
+            "assembly compile ok");
+
+        using var oZip = System.IO.Compression.ZipFile.OpenRead(Path.Combine(strDir, "asm.3mf"));
+        var oNsTable = new System.Xml.NameTable();
+        var oNs = new System.Xml.XmlNamespaceManager(oNsTable);
+        oNs.AddNamespace("m", "http://schemas.microsoft.com/3dmanufacturing/core/2015/02");
+        var oModel = new System.Xml.XmlDocument(oNsTable);
+        using (Stream oS = oZip.GetEntry("3D/3dmodel.model")!.Open())
+            oModel.Load(oS);
+        Assert.True(oModel.SelectNodes("//m:object[m:components]", oNs)!.Count == 1,
+            "one wrapper object in assembly mode");
+        Assert.True(oModel.SelectNodes("//m:component", oNs)!.Count == 2,
+            "wrapper holds both meshes as components");
+        Assert.True(oModel.SelectNodes("//m:item", oNs)!.Count == 1, "one build item");
+
+        var oConfig = new System.Xml.XmlDocument();
+        using (Stream oS = oZip.GetEntry("Metadata/model_settings.config")!.Open())
+            oConfig.Load(oS);
+        Assert.True(oConfig.SelectNodes("/config/object")!.Count == 1, "one config object");
+        Assert.Equal("1", oConfig.SelectSingleNode(
+            "/config/object/part[@id='1']/metadata[@key='extruder']/@value")!.Value!);
+        Assert.Equal("2", oConfig.SelectSingleNode(
+            "/config/object/part[@id='3']/metadata[@key='extruder']/@value")!.Value!);
+        Assert.True(oConfig.SelectNodes("/config/plate/model_instance")!.Count == 1,
+            "single plate instance");
+        string strRecord = File.ReadAllText(Path.Combine(strDir, "asm.3mf.project.json"));
+        Assert.True(strRecord.Contains("\"structure\":\"orca-project-assembly\""),
+            "assembly structure recorded");
+    }
+
     public static void CompileRefusesOpenMeshWithoutFlag()
     {
         string strDir = Directory.CreateTempSubdirectory("obc3mf-open").FullName;

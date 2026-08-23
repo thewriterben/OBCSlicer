@@ -45,7 +45,12 @@ public static class ThreeMfWriter
     private static string StrUuid(int n) =>
         $"0000{n.ToString("d4", CultureInfo.InvariantCulture)}-0000-4000-8000-000000000000";
 
-    public static void Write(string strOutputPath, IReadOnlyList<Part> aParts, PrinterSpec oPrinter)
+    /// <summary>bAssembly=false: one printable object per part (side-by-side parts).
+    /// bAssembly=true: ONE object whose volumes are the parts, each with its own
+    /// extruder — the representation for regions that overlap in XY (e.g. stacked
+    /// field bands), which as separate objects would refuse to slice.</summary>
+    public static void Write(string strOutputPath, IReadOnlyList<Part> aParts, PrinterSpec oPrinter,
+        bool bAssembly = false)
     {
         int nFilaments = aParts.Max(p => p.NFilament);
 
@@ -123,6 +128,11 @@ public static class ThreeMfWriter
             oW.WriteEndElement();
         });
 
+        // Wrapper objects: one per part normally; a single wrapper holding all
+        // meshes as components in assembly mode. Wrapper ids follow the mesh ids.
+        int nWrappers = bAssembly ? 1 : aParts.Count;
+        int NWrapperId(int nWrapper) => bAssembly ? 2 * aParts.Count : 2 * nWrapper + 2;
+
         WriteXmlEntry(oZip, "3D/3dmodel.model", oW =>
         {
             WriteModelOpen(oW);
@@ -131,22 +141,25 @@ public static class ThreeMfWriter
             WriteBbsVersionMeta(oW);
 
             oW.WriteStartElement("resources");
-            for (int i = 0; i < aParts.Count; i++)
+            for (int w = 0; w < nWrappers; w++)
             {
                 oW.WriteStartElement("object");
-                oW.WriteAttributeString("id", StrInv(2 * i + 2));
+                oW.WriteAttributeString("id", StrInv(NWrapperId(w)));
                 oW.WriteAttributeString("UUID", "http://schemas.microsoft.com/3dmanufacturing/production/2015/06",
-                    StrUuid(1 + i));
+                    StrUuid(1 + w));
                 oW.WriteAttributeString("type", "model");
                 oW.WriteStartElement("components");
-                oW.WriteStartElement("component");
-                oW.WriteAttributeString("path", "http://schemas.microsoft.com/3dmanufacturing/production/2015/06",
-                    "/" + astrObjectFiles[i]);
-                oW.WriteAttributeString("objectid", StrInv(2 * i + 1));
-                oW.WriteAttributeString("UUID", "http://schemas.microsoft.com/3dmanufacturing/production/2015/06",
-                    StrUuid(11 + i));
-                oW.WriteAttributeString("transform", "1 0 0 0 1 0 0 0 1 0 0 0");
-                oW.WriteEndElement();
+                foreach (int i in bAssembly ? Enumerable.Range(0, aParts.Count) : new[] { w })
+                {
+                    oW.WriteStartElement("component");
+                    oW.WriteAttributeString("path", "http://schemas.microsoft.com/3dmanufacturing/production/2015/06",
+                        "/" + astrObjectFiles[i]);
+                    oW.WriteAttributeString("objectid", StrInv(2 * i + 1));
+                    oW.WriteAttributeString("UUID", "http://schemas.microsoft.com/3dmanufacturing/production/2015/06",
+                        StrUuid(11 + i));
+                    oW.WriteAttributeString("transform", "1 0 0 0 1 0 0 0 1 0 0 0");
+                    oW.WriteEndElement();
+                }
                 oW.WriteEndElement();
                 oW.WriteEndElement();
             }
@@ -155,12 +168,12 @@ public static class ThreeMfWriter
             oW.WriteStartElement("build");
             oW.WriteAttributeString("UUID", "http://schemas.microsoft.com/3dmanufacturing/production/2015/06",
                 StrUuid(99));
-            for (int i = 0; i < aParts.Count; i++)
+            for (int w = 0; w < nWrappers; w++)
             {
                 oW.WriteStartElement("item");
-                oW.WriteAttributeString("objectid", StrInv(2 * i + 2));
+                oW.WriteAttributeString("objectid", StrInv(NWrapperId(w)));
                 oW.WriteAttributeString("UUID", "http://schemas.microsoft.com/3dmanufacturing/production/2015/06",
-                    StrUuid(21 + i));
+                    StrUuid(21 + w));
                 oW.WriteAttributeString("transform", "1 0 0 0 1 0 0 0 1 0 0 0");
                 oW.WriteAttributeString("printable", "1");
                 oW.WriteAttributeString("auto_drop", "1");
@@ -173,22 +186,29 @@ public static class ThreeMfWriter
         WriteXmlEntry(oZip, "Metadata/model_settings.config", oW =>
         {
             oW.WriteStartElement("config");
-            for (int i = 0; i < aParts.Count; i++)
+            for (int w = 0; w < nWrappers; w++)
             {
-                Part oPart = aParts[i];
                 oW.WriteStartElement("object");
-                oW.WriteAttributeString("id", StrInv(2 * i + 2));
-                WriteKv(oW, "name", oPart.StrName);
-                WriteKv(oW, "extruder", StrInv(oPart.NFilament));
-                foreach (KeyValuePair<string, string> oKv in
-                         oPart.Overrides.OrderBy(kv => kv.Key, StringComparer.Ordinal))
-                    WriteKv(oW, oKv.Key, oKv.Value);
-                oW.WriteStartElement("part");
-                oW.WriteAttributeString("id", StrInv(2 * i + 1));
-                oW.WriteAttributeString("subtype", "normal_part");
-                WriteKv(oW, "name", oPart.StrName);
-                WriteKv(oW, "matrix", "1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1");
-                oW.WriteEndElement();
+                oW.WriteAttributeString("id", StrInv(NWrapperId(w)));
+                if (bAssembly)
+                {
+                    // One object; each volume (<part>) carries its own extruder —
+                    // the fork importer reads per-part configs into ModelVolume::config.
+                    WriteKv(oW, "name", "assembly");
+                    WriteKv(oW, "extruder", StrInv(aParts[0].NFilament));
+                    for (int i = 0; i < aParts.Count; i++)
+                        WritePartElement(oW, aParts[i], 2 * i + 1, bWithExtruder: true);
+                }
+                else
+                {
+                    Part oPart = aParts[w];
+                    WriteKv(oW, "name", oPart.StrName);
+                    WriteKv(oW, "extruder", StrInv(oPart.NFilament));
+                    foreach (KeyValuePair<string, string> oKv in
+                             oPart.Overrides.OrderBy(kv => kv.Key, StringComparer.Ordinal))
+                        WriteKv(oW, oKv.Key, oKv.Value);
+                    WritePartElement(oW, oPart, 2 * w + 1, bWithExtruder: false);
+                }
                 oW.WriteEndElement();
             }
 
@@ -198,21 +218,21 @@ public static class ThreeMfWriter
             WriteKv(oW, "locked", "false");
             WriteKv(oW, "filament_map_mode", "Auto For Flush");
             WriteKv(oW, "filament_maps", string.Join(' ', Enumerable.Repeat("1", nFilaments)));
-            for (int i = 0; i < aParts.Count; i++)
+            for (int w = 0; w < nWrappers; w++)
             {
                 oW.WriteStartElement("model_instance");
-                WriteKv(oW, "object_id", StrInv(2 * i + 2));
+                WriteKv(oW, "object_id", StrInv(NWrapperId(w)));
                 WriteKv(oW, "instance_id", "0");
-                WriteKv(oW, "identify_id", StrInv(i + 1));
+                WriteKv(oW, "identify_id", StrInv(w + 1));
                 oW.WriteEndElement();
             }
             oW.WriteEndElement(); // plate
 
             oW.WriteStartElement("assemble");
-            for (int i = 0; i < aParts.Count; i++)
+            for (int w = 0; w < nWrappers; w++)
             {
                 oW.WriteStartElement("assemble_item");
-                oW.WriteAttributeString("object_id", StrInv(2 * i + 2));
+                oW.WriteAttributeString("object_id", StrInv(NWrapperId(w)));
                 oW.WriteAttributeString("instance_id", "0");
                 oW.WriteAttributeString("transform", "1 0 0 0 1 0 0 0 1 0 0 0");
                 oW.WriteAttributeString("offset", "0 0 0");
@@ -264,6 +284,23 @@ public static class ThreeMfWriter
         Kv("printer_settings_id", "\"\"");
         oSb.Append("\"printer_structure\":\"undefine\"}");
         return oSb.ToString();
+    }
+
+    private static void WritePartElement(XmlWriter oW, Part oPart, int nPartId, bool bWithExtruder)
+    {
+        oW.WriteStartElement("part");
+        oW.WriteAttributeString("id", StrInv(nPartId));
+        oW.WriteAttributeString("subtype", "normal_part");
+        WriteKv(oW, "name", oPart.StrName);
+        WriteKv(oW, "matrix", "1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1");
+        if (bWithExtruder)
+        {
+            WriteKv(oW, "extruder", StrInv(oPart.NFilament));
+            foreach (KeyValuePair<string, string> oKv in
+                     oPart.Overrides.OrderBy(kv => kv.Key, StringComparer.Ordinal))
+                WriteKv(oW, oKv.Key, oKv.Value);
+        }
+        oW.WriteEndElement();
     }
 
     private static string StrSafeName(string strName)

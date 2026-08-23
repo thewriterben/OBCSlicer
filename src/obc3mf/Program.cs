@@ -93,6 +93,11 @@ public static class Program
             StrPr("nozzle_diameter_mm"),
             NPr("printable_width_mm"), NPr("printable_depth_mm"), NPr("printable_height_mm"));
 
+        // assembly: all parts become volumes of ONE object (required when parts
+        // overlap in XY, e.g. stacked field bands — separate objects refuse to slice).
+        bool bAssembly = oRoot.TryGetProperty("assembly", out JsonElement oAsm)
+            && oAsm.ValueKind == JsonValueKind.True;
+
         var aDegradations = new List<Degradation>();
         var aParts = new List<ThreeMfWriter.Part>();
         var aPartRecords = new List<object?>();
@@ -150,12 +155,12 @@ public static class Program
             });
         }
 
-        ThreeMfWriter.Write(strOutput, aParts, oPrinter);
+        ThreeMfWriter.Write(strOutput, aParts, oPrinter, bAssembly);
 
         var oRecord = new Dictionary<string, object?>
         {
             ["record"] = "obc-project/0.2",
-            ["structure"] = "orca-project",
+            ["structure"] = bAssembly ? "orca-project-assembly" : "orca-project",
             ["printer"] = new Dictionary<string, object?>
             {
                 ["nozzle_diameter_mm"] = oPrinter.StrNozzleDiameterMm,

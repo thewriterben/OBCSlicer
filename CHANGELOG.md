@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-23 — Field Engine v0: declared fields to multi-material G-code, live
+
+- `src/fieldengine` (net9.0 + PicoGK 2.2.0, the ODC stack; own `FieldEngine.slnx` since the sandbox that verifies the net8.0 projects lacks the PicoGK runtime): `obc-field/0.1` specs — mesh (mm, declared) + explicit voxel size + axis-band material field → per-band voxel regions (box-voxel booleans; `voxIntersectImplicit` SEH-faults under instance-Library mode, avoided and documented) → obc3mf manifest + deterministic timestamp-free field record.
+- obc3mf gains **assembly mode** (`"assembly": true`, recorded as `orca-project-assembly`): all parts become volumes of ONE object with per-`<part>` extruder metadata — required for regions that overlap in XY; as separate objects the slicer refuses (−100). API surface for PicoGK verified by reflection against the cached package; two live-run bugs found and fixed (SaveToStlFile trailing scale param zeroes meshes; stale `--no-build` binary).
+- **Live acceptance: z-banded cube field spec → fieldengine → obc3mf → obcslice → `; filament: 2,1`, 100 layers, exactly one toolchange at z=10mm.** The full OpenVCAD-shaped chain — declared field to provenance-attested multi-material G-code — runs end to end on stock tooling.
+- 24/24 sandbox tests (assembly structure covered); `docs/specs/FIELD-SPEC.md` written.
+
 ## 2026-08-23 — Multi-material toolchanges: solved (obc3mf v0.2)
 
 - Root cause confirmed via GUI check: Orca honors per-object extruders only for its own project files. Reverse-engineered the minimal sufficient structure from a GUI-saved reference (thanks Benji) by ablation + delta-debugging: thumbnails/slice-info droppable, `project_settings.config` mandatory, 653 → **22 keys**, identity fields must stay empty (preset-name matching crashes), machine facts must come from the caller.

@@ -20,7 +20,7 @@ Close the ecosystem's actual gap first: ODC `handoff` stages STL + sidecar to a 
 
 ## P2 — Discrete multi-material + texture pipeline
 
-- [ ] Field Engine skeleton: OpenVDB grid in (SDF + per-material volume fraction), mm + voxel size declared, validation gate, deterministic — **blocked on NuGet access for PicoGK**
+- [x] Field Engine v0 (`src/fieldengine`, net9.0 + PicoGK 2.2.0, own `FieldEngine.slnx` — needs the PicoGK stack, verified on the dev machine): axis-band material fields over a mesh → voxel regions → obc3mf assembly manifest → deterministic field record. **Live-verified end to end: field spec → G-code with the material change exactly at the band boundary** (`docs/specs/FIELD-SPEC.md`, 2026-08-23). OpenVDB-grid input (`vdb_grid`) is the next field type — PicoGK's `voxFromVdbFile` is the seam
 - [x] 3MF emission half of the compiler: `obc3mf` — manifest (meshes + filament slots + per-object overrides) → fork-native 3MF project + canonical compile record (`obc-project/0.1`); closed-mesh gate (open meshes refused unless flagged, recorded); `docs/specs/MM-3MF.md` cites the importer code it targets. Live GUI import check pending, same blocker as the live slice (2026-08-23)
 - [ ] Field→region extraction (threshold/argmax volume fractions → region meshes feeding obc3mf) — needs the Field Engine above
 - [x] **Multi-material toolchanges achieved without fork changes** — GUI check showed the gap is importer-wide for generic 3MFs; solved instead by emitting the validated minimal Orca project structure (GUI reference + delta-debugging: 653→22 project_settings keys). obc3mf v0.2 emits it; live-verified 50×`T1` in headless G-code from real obc3mf output (2026-08-23). The fork branch idea is superseded — stock Orca works
