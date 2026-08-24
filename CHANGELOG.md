@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-23 — FIRST PHYSICAL PRINT: the field-banded cube exists
+
+- The K2 Plus printed `47a9eb838791-3867ba336621.gcode` to completion (1907mm filament): a 20mm cube, Generic PLA below z=10mm, PLA High Speed above, one toolchange — compiled from a declared axis-band field through the full chain, every hop hashed, both actions human-approved.
+- The studio jobs ledger holds the complete audit trail: upload (approved, executed) → print (approved, executed) → cancel after the CFS lane-mapping halt (approved) → print (approved, executed, complete). The failed first start produced a documented field lesson (ORCA-CLI.md: empty-lane "runout"), not a mystery.
+- Project state: everything the original ask named is now demonstrated live — custom slicing layer (P1), OpenVCAD-style fields → multi-material (P2 + Field Engine), STL texturizer bridge, OBC-ecosystem integration (propose-only studio seam, provenance chain), plus P3 process grading. Remaining frontiers: `vdb_grid` input, BINGO evidence linkage, boundary-accuracy measurement (scan-compare), temperature-responsive filament.
+
 ## 2026-08-23 — P3: per-band process overrides, functionally graded infill live
 
 - Field spec bands accept `overrides` (any string-valued slicer key; `extruder`/`filament` refused — material comes from `filament`). They flow: field spec → manifest parts → obc3mf per-`<part>` metadata → Orca applies per-volume.

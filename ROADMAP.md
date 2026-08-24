@@ -16,7 +16,7 @@ Close the ecosystem's actual gap first: ODC `handoff` stages STL + sidecar to a 
 - [x] `obcslice` wrapper: mesh + profiles + design sidecar in → G-code + **slice record** out; sidecar↔model hash verified before slicing, refuse on mismatch; 12 tests green (2026-08-23)
 - [x] Slice record schema v0.1 (`docs/specs/SLICE-RECORD.md`), media type `application/vnd.obc.slice+json`, byte-compatible with ODC/BINGO `canonical_json` — checked against Python reference (2026-08-23)
 - [x] MCP surface (`obcslicer-mcp`, stdlib-only stdio JSON-RPC): `slice` + `stage_for_studio` (design+gcode-hash naming so AdvancedStudio's `carries_design_hash` check passes) + **`propose_upload`/`propose_print`** — contract read from studio-core source (guard.py/staging.py/app.py), propose-only, human approves in the dashboard. **Live-verified against the running studio: field-cube G-code staged and proposed, confirmation registered, honest approval prompt** (2026-08-23)
-- [ ] End-to-end: run → obcslice → proposal → **human approves** → K2 prints → job ledger row references design *and* slice hashes. Everything up to the approval is live; the approval and print are Benji's
+- [x] **End-to-end, physically: field spec → fieldengine → obc3mf → obcslice → stage → propose → human approved → K2 printed the two-material banded cube (state `complete`, 1907mm filament).** Jobs ledger holds the full audit trail (upload/print/cancel/print, all approved, design-hash-linked). One field lesson recorded: CFS lane mapping (ORCA-CLI.md) (2026-08-23)
 
 ## P2 — Discrete multi-material + texture pipeline
 
@@ -26,7 +26,7 @@ Close the ecosystem's actual gap first: ODC `handoff` stages STL + sidecar to a 
 - [x] **Multi-material toolchanges achieved without fork changes** — GUI check showed the gap is importer-wide for generic 3MFs; solved instead by emitting the validated minimal Orca project structure (GUI reference + delta-debugging: 653→22 project_settings keys). obc3mf v0.2 emits it; live-verified 50×`T1` in headless G-code from real obc3mf output (2026-08-23). The fork branch idea is superseded — stock Orca works
 - [ ] CFS mapping: region→AMS/CFS slot with purge estimates; degradation (e.g. more regions than slots) reported in the slice record, never silent
 - [x] BumpMesh headless bridge: `texturize-cli.mjs` committed to the stlTexturizer repo (GPL side, separate process per ADR-0004) — runs the exact web export pipeline from Node; verified 12-tri cube → 31k-tri watertight mesh → passes obc3mf's closed-mesh gate, exit 0 (2026-08-23). Hash chaining into the compile record: wire when the pipeline caller lands
-- [ ] Print a two-material + textured test artifact; measure region boundary accuracy vs field
+- [x] **First physical two-material print: the z-banded field cube, printed 2026-08-23** — material change at z=10mm as compiled. Still worth doing: a textured+multi-material combined artifact, and measuring boundary accuracy vs the field spec
 
 ## P3 — Process-parameter grading (first field-driven G-code on owned hardware)
 
