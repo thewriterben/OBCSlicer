@@ -375,6 +375,9 @@ public static class Tests
         Assert.True(oModel.SelectNodes("//m:component", oNs)!.Count == 2,
             "wrapper holds both meshes as components");
         Assert.True(oModel.SelectNodes("//m:item", oNs)!.Count == 1, "one build item");
+        // Placement: tetra bbox is (0..1)^3, plate 350x350 → center translation 174.5, floor Z 0.
+        Assert.Equal("1 0 0 0 1 0 0 0 1 174.5 174.5 0",
+            oModel.SelectSingleNode("//m:item/@transform", oNs)!.Value!);
 
         var oConfig = new System.Xml.XmlDocument();
         using (Stream oS = oZip.GetEntry("Metadata/model_settings.config")!.Open())

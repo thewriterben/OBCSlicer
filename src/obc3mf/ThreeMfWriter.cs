@@ -54,6 +54,32 @@ public static class ThreeMfWriter
     {
         int nFilaments = aParts.Max(p => p.NFilament);
 
+        // Plate placement: meshes stay in their own coordinates (bands reference
+        // that frame); the BUILD transform moves the combined bounding box to the
+        // plate center with its floor at Z=0 — identity transforms print parts
+        // literally at their mesh coordinates, i.e. in the bed's corner.
+        float fMinX = float.MaxValue, fMinY = float.MaxValue, fMinZ = float.MaxValue;
+        float fMaxX = float.MinValue, fMaxY = float.MinValue;
+        foreach (Part oP in aParts)
+            foreach ((float x, float y, float z) in oP.oMesh.Vertices)
+            {
+                fMinX = MathF.Min(fMinX, x); fMaxX = MathF.Max(fMaxX, x);
+                fMinY = MathF.Min(fMinY, y); fMaxY = MathF.Max(fMaxY, y);
+                fMinZ = MathF.Min(fMinZ, z);
+            }
+        float fTx = oPrinter.NPrintableWidthMm / 2f - (fMinX + fMaxX) / 2f;
+        float fTy = oPrinter.NPrintableDepthMm / 2f - (fMinY + fMaxY) / 2f;
+        float fTz = -fMinZ;
+        // 0.001mm placement precision: swallows voxel-derived float noise and -0,
+        // and keeps the emitted text deterministic and readable.
+        string StrT(float f)
+        {
+            float fRounded = MathF.Round(f, 3);
+            if (fRounded == 0) fRounded = 0f;
+            return fRounded.ToString("0.###", CultureInfo.InvariantCulture);
+        }
+        string strPlacement = $"1 0 0 0 1 0 0 0 1 {StrT(fTx)} {StrT(fTy)} {StrT(fTz)}";
+
         using FileStream oFile = File.Create(strOutputPath);
         using var oZip = new ZipArchive(oFile, ZipArchiveMode.Create);
 
@@ -174,7 +200,7 @@ public static class ThreeMfWriter
                 oW.WriteAttributeString("objectid", StrInv(NWrapperId(w)));
                 oW.WriteAttributeString("UUID", "http://schemas.microsoft.com/3dmanufacturing/production/2015/06",
                     StrUuid(21 + w));
-                oW.WriteAttributeString("transform", "1 0 0 0 1 0 0 0 1 0 0 0");
+                oW.WriteAttributeString("transform", strPlacement);
                 oW.WriteAttributeString("printable", "1");
                 oW.WriteAttributeString("auto_drop", "1");
                 oW.WriteEndElement();
@@ -234,7 +260,7 @@ public static class ThreeMfWriter
                 oW.WriteStartElement("assemble_item");
                 oW.WriteAttributeString("object_id", StrInv(NWrapperId(w)));
                 oW.WriteAttributeString("instance_id", "0");
-                oW.WriteAttributeString("transform", "1 0 0 0 1 0 0 0 1 0 0 0");
+                oW.WriteAttributeString("transform", strPlacement);
                 oW.WriteAttributeString("offset", "0 0 0");
                 oW.WriteEndElement();
             }
