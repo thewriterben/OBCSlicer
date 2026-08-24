@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-23 — vdb_regions: the OpenVDB/OpenVCAD interop seam, live
+
+- Field type `vdb_regions` (spec → `obc-field/0.2`): per-material OpenVDB volumes intersected with the part, priority-ordered on overlap, **explicit** `remainder` filament required for unclaimed volume — refusal over silent assignment. Input VDBs content-hashed into the field record.
+- `fieldengine make-vdb sphere|box`: author material volumes without OpenVCAD (mm, explicit voxel size).
+- **Live: sphere.vdb (r=8, cube center) → spherical filament-2 core in a filament-1 cube → 82 toolchanges across 100 layers.** Any OpenVDB producer — OpenVCAD included — can now drive multi-material G-code through the pipeline as pure file interop (ADR-0003 honored: no OpenVCAD code anywhere).
+- PicoGK gotcha documented: ambient-mode overloads (`voxSphere`, `mshCreateCube`, `voxFromVdbFile`, `new Voxels()` without a Library) throw under instance mode — use the Library-taking overloads.
+- Also: build placement centered on plate (earlier commit) after the first physical print landed in the bed corner.
+
 ## 2026-08-23 — FIRST PHYSICAL PRINT: the field-banded cube exists
 
 - The K2 Plus printed `47a9eb838791-3867ba336621.gcode` to completion (1907mm filament): a 20mm cube, Generic PLA below z=10mm, PLA High Speed above, one toolchange — compiled from a declared axis-band field through the full chain, every hop hashed, both actions human-approved.

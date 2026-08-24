@@ -11,11 +11,15 @@ public sealed record FieldSpec
 {
     public required string StrMeshPath { get; init; }
     public required float FVoxelSizeMm { get; init; }
-    public required string StrAxis { get; init; }             // "x" | "y" | "z"
-    public required IReadOnlyList<Band> Bands { get; init; }
+    public required string StrFieldType { get; init; }        // "axis_bands" | "vdb_regions"
+    public string StrAxis { get; init; } = "z";               // axis_bands only
+    public IReadOnlyList<Band> Bands { get; init; } = Array.Empty<Band>();
+    public IReadOnlyList<VdbRegion> VdbRegions { get; init; } = Array.Empty<VdbRegion>();
+    public Band? ORemainder { get; init; }                    // vdb_regions: part volume no region claims
     public required JsonElement OPrinter { get; init; }       // passed through to the manifest
 
     public sealed record Band(int NFilament, float? FUpToMm, IReadOnlyDictionary<string, string> Overrides);
+    public sealed record VdbRegion(string StrVdbPath, int NFilament, IReadOnlyDictionary<string, string> Overrides);
 
     public static FieldSpec OParse(string strSpecPath)
     {
@@ -51,10 +55,11 @@ public sealed record FieldSpec
         if (!oRoot.TryGetProperty("field", out JsonElement oField) || oField.ValueKind != JsonValueKind.Object)
             throw new InvalidDataException("Spec needs a \"field\" object.");
         string strType = StrReq(oField, "type", "field");
+        if (strType == "vdb_regions")
+            return OParseVdbRegions(oRoot, oField, strMesh, fVoxel, strDir);
         if (strType != "axis_bands")
             throw new InvalidDataException(
-                $"field.type '{strType}' unknown. v0.1 implements \"axis_bands\"; " +
-                "vdb-grid fields are the planned next input (roadmap P4).");
+                $"field.type '{strType}' unknown. Implemented: \"axis_bands\", \"vdb_regions\".");
         string strAxis = StrReq(oField, "axis", "field");
         if (strAxis is not ("x" or "y" or "z"))
             throw new InvalidDataException("field.axis must be \"x\", \"y\" or \"z\".");
@@ -98,24 +103,8 @@ public sealed record FieldSpec
                         $"of 2 voxels ({2 * fVoxel:F3} mm). Use a finer voxel size or thicker bands.");
                 fPrev = fCur;
             }
-            // Per-band process overrides: any string-valued slicer key (this is the
-            // P3 process-grading seam — e.g. sparse_infill_density per band).
-            var oOverrides = new Dictionary<string, string>(StringComparer.Ordinal);
-            if (oBand.TryGetProperty("overrides", out JsonElement oOv))
-            {
-                if (oOv.ValueKind != JsonValueKind.Object)
-                    throw new InvalidDataException($"Band {nIndex}: overrides must be an object.");
-                foreach (JsonProperty oProp in oOv.EnumerateObject())
-                {
-                    if (oProp.Name is "extruder" or "filament")
-                        throw new InvalidDataException(
-                            $"Band {nIndex}: material comes from \"filament\", never an override.");
-                    oOverrides[oProp.Name] = oProp.Value.GetString()
-                        ?? throw new InvalidDataException(
-                            $"Band {nIndex}: override '{oProp.Name}' must be a string value.");
-                }
-            }
-            aBands.Add(new Band(oFil.GetInt32(), fUpTo, oOverrides));
+            // Per-band process overrides: the P3 process-grading seam.
+            aBands.Add(new Band(oFil.GetInt32(), fUpTo, OParseOverrides(oBand, $"Band {nIndex}")));
         }
 
         if (!oRoot.TryGetProperty("printer", out JsonElement oPrinter) || oPrinter.ValueKind != JsonValueKind.Object)
@@ -127,10 +116,83 @@ public sealed record FieldSpec
         {
             StrMeshPath = strMesh,
             FVoxelSizeMm = fVoxel,
+            StrFieldType = "axis_bands",
             StrAxis = strAxis,
             Bands = aBands,
             OPrinter = oPrinter.Clone(),
         };
+    }
+
+    /// <summary>`vdb_regions`: each region is an OpenVDB volume (anything PicoGK,
+    /// OpenVCAD, or `make-vdb` emits) intersected with the part. Priority order:
+    /// earlier regions win where volumes overlap. Part volume claimed by no
+    /// region needs an explicit `remainder` — no silent material assignment.</summary>
+    private static FieldSpec OParseVdbRegions(
+        JsonElement oRoot, JsonElement oField, string strMesh, float fVoxel, string strDir)
+    {
+        if (!oField.TryGetProperty("regions", out JsonElement oRegions)
+            || oRegions.ValueKind != JsonValueKind.Array || oRegions.GetArrayLength() == 0)
+            throw new InvalidDataException("field.regions needs at least one { vdb, filament } entry.");
+
+        var aRegions = new List<VdbRegion>();
+        int nIndex = 0;
+        foreach (JsonElement oRegion in oRegions.EnumerateArray())
+        {
+            nIndex++;
+            string strVdbRel = StrReq(oRegion, "vdb", $"region {nIndex}");
+            string strVdb = Path.IsPathRooted(strVdbRel) ? strVdbRel : Path.Combine(strDir, strVdbRel);
+            if (!File.Exists(strVdb))
+                throw new FileNotFoundException($"Region {nIndex}: vdb not found: {strVdb}");
+            if (!oRegion.TryGetProperty("filament", out JsonElement oFil)
+                || oFil.ValueKind != JsonValueKind.Number || oFil.GetInt32() < 1)
+                throw new InvalidDataException($"Region {nIndex}: needs \"filament\" >= 1.");
+            aRegions.Add(new VdbRegion(strVdb, oFil.GetInt32(), OParseOverrides(oRegion, $"region {nIndex}")));
+        }
+
+        Band? oRemainder = null;
+        if (oField.TryGetProperty("remainder", out JsonElement oRem))
+        {
+            if (oRem.ValueKind != JsonValueKind.Object
+                || !oRem.TryGetProperty("filament", out JsonElement oRf)
+                || oRf.ValueKind != JsonValueKind.Number || oRf.GetInt32() < 1)
+                throw new InvalidDataException("field.remainder needs { \"filament\": N }.");
+            oRemainder = new Band(oRf.GetInt32(), null, OParseOverrides(oRem, "remainder"));
+        }
+
+        if (!oRoot.TryGetProperty("printer", out JsonElement oPrinter) || oPrinter.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException(
+                "Spec needs a \"printer\" block (passed through to the obc3mf manifest; " +
+                "machine facts are never defaulted).");
+
+        return new FieldSpec
+        {
+            StrMeshPath = strMesh,
+            FVoxelSizeMm = fVoxel,
+            StrFieldType = "vdb_regions",
+            VdbRegions = aRegions,
+            ORemainder = oRemainder,
+            OPrinter = oPrinter.Clone(),
+        };
+    }
+
+    private static IReadOnlyDictionary<string, string> OParseOverrides(JsonElement oOwner, string strWhere)
+    {
+        var oOverrides = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (oOwner.TryGetProperty("overrides", out JsonElement oOv))
+        {
+            if (oOv.ValueKind != JsonValueKind.Object)
+                throw new InvalidDataException($"{strWhere}: overrides must be an object.");
+            foreach (JsonProperty oProp in oOv.EnumerateObject())
+            {
+                if (oProp.Name is "extruder" or "filament")
+                    throw new InvalidDataException(
+                        $"{strWhere}: material comes from \"filament\", never an override.");
+                oOverrides[oProp.Name] = oProp.Value.GetString()
+                    ?? throw new InvalidDataException(
+                        $"{strWhere}: override '{oProp.Name}' must be a string value.");
+            }
+        }
+        return oOverrides;
     }
 
     private static string StrReq(JsonElement o, string strKey, string strWhere)

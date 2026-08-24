@@ -46,6 +46,20 @@ The Field Engine's input and record formats. The engine compiles a material fiel
 
 Bands accept `"overrides": { "<slicer key>": "<string value>" }`, flowing into the manifest parts and obc3mf's per-`<part>` metadata, which Orca applies per-volume. **Live result (2026-08-23): single-filament cube, `sparse_infill_density` 80% below z=10mm / 10% above → 2.94× extrusion ratio across the boundary — functionally graded density on stock hardware, no toolchange.** `extruder`/`filament` are refused as overrides — material comes from `filament`. Caveat: only region-scope (per-volume) slicer settings apply; filament-scope settings (temperatures) do not ride per-part metadata — grade those via distinct filament slots with different profiles instead.
 
+## `vdb_regions` — OpenVDB interop (v0.2, live-verified)
+
+```jsonc
+"field": { "type": "vdb_regions",
+  "regions": [ { "vdb": "core.vdb", "filament": 2, "overrides": {} } ],
+  "remainder": { "filament": 1 } }
+```
+
+Each region is an OpenVDB volume file — producible by OpenVCAD, ODC/PicoGK, or the bundled authoring utility (`fieldengine make-vdb sphere|box`, mm, explicit voxel). Semantics: `region_i = (part ∩ vdb_i) − earlier regions` (priority order where volumes overlap); part volume claimed by no region goes to the **explicit** `remainder` filament or the compile refuses — no silent material assignment. Input VDBs are content-hashed into the field record.
+
+**Live result (2026-08-23): sphere.vdb (r=8 at cube center) → spherical filament-2 core inside a filament-1 cube → 82 toolchanges across 100 layers** — true 3D volumetric material assignment, the OpenVCAD-output seam working end to end.
+
+PicoGK 2.2.0 gotcha (found live): short overloads (`voxSphere(center,r)`, `mshCreateCube(bbox)`, `voxFromVdbFile(path)`, `new Voxels()`) assume `Library.Go` ambient mode and throw under instance mode — always use the `Library`-taking overloads.
+
 ## Deferred
 
-`vdb_grid` field type (OpenVDB volume-fraction grids in — PicoGK's `voxFromVdbFile` is the seam; this is where OpenVCAD output plugs in) · non-axis fields (radial, mesh-distance) · fractional/dithered boundaries.
+Volume-fraction/multi-grid VDBs (current: one indicator volume per region; fractional fields need argmax/dither compilation) · non-axis analytic fields (radial, mesh-distance) · dithered boundaries.
