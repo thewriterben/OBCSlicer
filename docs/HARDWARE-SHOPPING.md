@@ -17,14 +17,17 @@ Requirement comes from ODC's `compare`: it judges print deviations (~0.05–0.3m
 | Revopoint POP3 Plus | ~$500–700 | 0.05mm class | Adequate all-rounder, not great |
 | Revopoint MINI 2 | ~$829 | 0.02mm, blue light, small-part specialist | Step up; maturest small-part software |
 | Einstar / Einstar 2 | ~$859–959 | 0.05mm res (laser mode on 2) | Better for medium/large than tiny parts |
-| **Creality CR-Scan Otter** | ~$899 | 0.02mm point acc, 4-lens small+medium | **Best single do-everything unit**; covers ODC's whole scan-to-fit range, same ecosystem |
+| Creality Otter Lite | ~$500 | 0.02mm class, fewer lenses/narrower range | Budget in-ecosystem option; mostly re-creates the Seal Lite niche |
+| **Creality CR-Scan Otter** | ~$719 street ($899 MSRP) | 0.02mm point acc, 4-lens small+medium | **Best single do-everything unit**; covers ODC's whole scan-to-fit range, same ecosystem |
+| Creality CR-Scan Raptor | ~$999 street | 0.02mm blue-laser mode (0.1mm NIR mode) | The in-ecosystem MetroX: laser skips spray on dark/glossy; pick over Otter only if that matters |
+| Creality Raptor Pro | ~$1,699 | 0.02mm, 7+22 laser lines, huge size range | Pays for speed/range this work doesn't need |
 | 3DMakerpro Seal (pair) | <$1000 | 0.01mm class | Only sub-$1k 0.01mm option |
 | Revopoint MetroX | ~$1,200 | 0.03mm laser | Best accuracy/$ if reverse-engineering too; laser skips spray on dark/glossy |
 | Revopoint MetroY Pro | ~$1,759 | metrology | Beyond hobby needs |
 | Matter and Form THREE | ~$3,000 | 33 micron, standalone, no dots | Metrology tier |
 | Creality RaptorX | ~$3,133–3,199 | 0.02mm, wireless blue laser + NIR | Metrology tier; overkill here |
 
-Decision shortcut: **Seal Lite** if cube-class validation is the whole job · **Otter** for one scanner across all ODC part sizes · **MetroX** if dark/glossy-without-spray matters. Matte PLA scans fine on any 0.02mm-class unit.
+Decision shortcut: **Otter (~$719 street)** as the default — one scanner across all ODC part sizes, same ecosystem · **Raptor (~$999)** if dark/glossy-without-spray matters (in-ecosystem alternative to MetroX) · **Seal Lite ($349)** if spend is the constraint and cube-class validation is the whole job. Matte PLA scans fine on any 0.02mm-class unit.
 
 Notes: matte PLA scans fine; dark/glossy parts need scanning spray. STL export feeds ODC's declared-units import boundary directly (`run-cradle` / `compare`, AUTO refused).
 
