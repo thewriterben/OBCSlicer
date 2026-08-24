@@ -60,6 +60,17 @@ Each region is an OpenVDB volume file — producible by OpenVCAD, ODC/PicoGK, or
 
 PicoGK 2.2.0 gotcha (found live): short overloads (`voxSphere(center,r)`, `mshCreateCube(bbox)`, `voxFromVdbFile(path)`, `new Voxels()`) assume `Library.Go` ambient mode and throw under instance mode — always use the `Library`-taking overloads.
 
+## Recipe: temperature→density grading with foaming filament (ready to run when spools arrive)
+
+Temperature is filament-scope and cannot ride per-volume overrides — so grade it via **slots**: load the *same* LW filament (e.g. eSUN ePLA-LW) in two CFS lanes (A and B — lane mapping per ORCA-CLI.md), and slice with two filament profiles differing only in temperature:
+
+1. Duplicate a PLA filament profile twice: `LW solid` (nozzle ~210–215°C, flow 100%) and `LW foamed` (~245–255°C, flow 45–55%, cooling up, speed down — start from ColorFabb's guide and calibrate flow with a two-wall cube).
+2. Field spec: any field type, `filament: 1` = solid bands/regions, `filament: 2` = foamed. The banded-cube spec from live-run-3 works verbatim.
+3. Slice with `--filament <LW-solid.json> --filament <LW-foamed.json>`. The toolchange purges through the same material, so waste is modest.
+4. Result: one material, per-band density — the 2025 gradient paper's case (c) on stock hardware. Validate density per band by weighing (or extrusion analysis as in the graded-infill run).
+
+Do NOT invent flow/temp numbers per band beyond the calibrated profiles — calibrate once, record in the profiles, let the hashes attest them.
+
 ## Deferred
 
 Volume-fraction/multi-grid VDBs (current: one indicator volume per region; fractional fields need argmax/dither compilation) · non-axis analytic fields (radial, mesh-distance) · dithered boundaries.
