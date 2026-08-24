@@ -560,6 +560,50 @@ public static class Tests
             "refusal explains attestation failure");
     }
 
+    // ---- obcslicer-ui server handlers ---------------------------------------
+
+    public static void UiSliceHandlerDryRun()
+    {
+        string strDir = Directory.CreateTempSubdirectory("ui-slice").FullName;
+        string strModel = Path.Combine(strDir, "part.stl");
+        File.WriteAllBytes(strModel, new byte[] { 1, 2, 3 });
+        File.WriteAllText(Path.Combine(strDir, "mach.json"), "{}");
+        File.WriteAllText(Path.Combine(strDir, "proc.json"), "{}");
+        string strBody = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["model"] = strModel,
+            ["machine"] = Path.Combine(strDir, "mach.json"),
+            ["process"] = Path.Combine(strDir, "proc.json"),
+            ["outdir"] = Path.Combine(strDir, "out"),
+            ["dry_run"] = true,
+        });
+        (int nStatus, string strJson) = ObcSlicerUi.Server.Slice(strBody);
+        Assert.True(nStatus == 200, $"dry-run slice handler 200, got {nStatus}: {strJson}");
+        Assert.True(strJson.Contains("\"dry_run\""), "record degradations surface in response");
+    }
+
+    public static void UiCompileHandlerSurfacesRefusal()
+    {
+        string strDir = Directory.CreateTempSubdirectory("ui-c3mf").FullName;
+        string strManifest = Path.Combine(strDir, "m.json");
+        File.WriteAllText(strManifest, "{ \"output\": \"x.3mf\", \"parts\": [] }");
+        (int nStatus, string strJson) = ObcSlicerUi.Server.Compile3mf(
+            System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["manifest_path"] = strManifest,
+            }));
+        Assert.True(nStatus == 422, $"invalid manifest → 422, got {nStatus}");
+        Assert.True(strJson.Contains("parts"), "refusal message passed through verbatim");
+    }
+
+    public static void UiStageHandlerMapsToolErrors()
+    {
+        (int nStatus, string strJson) = ObcSlicerUi.Server.StageOrPropose("stage_for_studio",
+            "{\"gcode\":\"Z:\\\\nope.gcode\",\"slice_record\":\"Z:\\\\nope.json\",\"staging_dir\":\"Z:\\\\s\"}");
+        Assert.True(nStatus == 422, $"missing files → 422, got {nStatus}");
+        Assert.True(strJson.Contains("not found"), "tool error text surfaced");
+    }
+
     public static void MismatchedSidecarIsExitCode2()
     {
         string strDir = Directory.CreateTempSubdirectory("obcslice-e2e").FullName;

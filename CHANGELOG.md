@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-23 — obcslicer-ui: the GUI front-end
+
+- `src/obcslicer-ui`: loopback web GUI (127.0.0.1:8771) in the studio-core dashboard style — HttpListener + one self-contained HTML page, zero packages. Three panels mirror the pipeline: field spec editor → compile; project compile + slice (profiles, slicer path); stage + propose (approval stays in the studio dashboard). Live printer state and pending approvals polled from studio-core; every record and degradation rendered verbatim in the activity log — the UI shows refusals, it never softens them.
+- obcslice/obc3mf run in-process; fieldengine runs as a subprocess (PicoGK stack), auto-probed or via `OBCSLICE_FIELDENGINE`. Last-used paths persist to `.tools/ui-config.json`.
+- Launch: `run-ui.cmd` (builds, opens browser, serves). 27/27 tests (handler-level: dry-run slice, refusal passthrough, tool-error mapping). Verified live: page serves, studio/printer state flowing.
+
 ## 2026-08-23 — vdb_regions: the OpenVDB/OpenVCAD interop seam, live
 
 - Field type `vdb_regions` (spec → `obc-field/0.2`): per-material OpenVDB volumes intersected with the part, priority-ordered on overlap, **explicit** `remainder` filament required for unclaimed volume — refusal over silent assignment. Input VDBs content-hashed into the field record.

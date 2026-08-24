@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OBCSlicer</title>
+<style>
+:root { --bg:#14161a; --panel:#1c1f26; --line:#2b303b; --fg:#d7dce4; --dim:#8b93a2;
+        --acc:#4ea1ff; --ok:#4ecf6a; --warn:#e0b13f; --err:#e05252; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--fg);
+       font:14px/1.45 "Segoe UI",system-ui,sans-serif; }
+header { display:flex; align-items:baseline; gap:14px; padding:14px 22px;
+         border-bottom:1px solid var(--line); }
+header h1 { font-size:18px; margin:0; letter-spacing:.5px; }
+header .sub { color:var(--dim); font-size:12px; }
+#studio { margin-left:auto; font-size:12px; color:var(--dim); }
+#studio .on { color:var(--ok); }
+main { display:grid; grid-template-columns: 1fr 1fr; gap:16px; padding:16px 22px; }
+section { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+          padding:14px 16px; }
+section h2 { margin:0 0 10px; font-size:13px; text-transform:uppercase;
+             letter-spacing:1px; color:var(--acc); }
+label { display:block; margin:8px 0 2px; font-size:12px; color:var(--dim); }
+input[type=text], textarea, select { width:100%; background:#12141a; color:var(--fg);
+  border:1px solid var(--line); border-radius:5px; padding:6px 8px;
+  font:12px Consolas,monospace; }
+textarea { min-height:130px; resize:vertical; }
+button { background:var(--acc); color:#0c0f14; border:0; border-radius:6px;
+  padding:8px 14px; margin:10px 6px 0 0; font-weight:600; cursor:pointer; }
+button.secondary { background:#333a48; color:var(--fg); }
+button:disabled { opacity:.45; cursor:default; }
+#log { grid-column:1 / -1; }
+.entry { border-top:1px solid var(--line); padding:8px 0; }
+.entry .head { font-weight:600; }
+.entry .head .ok { color:var(--ok); } .entry .head .err { color:var(--err); }
+.deg { color:var(--warn); font:12px Consolas,monospace; margin:2px 0 0 14px; }
+pre { background:#12141a; border:1px solid var(--line); border-radius:5px;
+      padding:8px; font:11px Consolas,monospace; max-height:260px; overflow:auto;
+      white-space:pre-wrap; word-break:break-all; }
+.row { display:flex; gap:10px; } .row > div { flex:1; }
+small.hint { color:var(--dim); }
+</style>
+</head>
+<body>
+<header>
+  <h1>OBCSlicer</h1>
+  <span class="sub">field &rarr; regions &rarr; project &rarr; attested G-code &rarr; proposed print</span>
+  <span id="studio">studio: checking&hellip;</span>
+</header>
+<main>
+  <section>
+    <h2>1 &middot; Field spec</h2>
+    <label>Field spec JSON (obc-field/0.2 — axis_bands or vdb_regions)</label>
+    <textarea id="spec"></textarea>
+    <label>Spec file path (saved before compiling)</label>
+    <input type="text" id="spec_path">
+    <label>Output directory</label>
+    <input type="text" id="field_outdir">
+    <button onclick="fieldCompile()">Compile field &rarr; regions</button>
+    <small class="hint">Or skip this panel and point panel 2 at a hand-written manifest.</small>
+  </section>
+
+  <section>
+    <h2>2 &middot; Project + slice</h2>
+    <label>Manifest path (from panel 1, or your own)</label>
+    <input type="text" id="manifest_path">
+    <button class="secondary" onclick="compile3mf()">Compile 3MF project</button>
+    <label>Machine profile</label><input type="text" id="machine">
+    <label>Process profile</label><input type="text" id="process">
+    <div class="row">
+      <div><label>Filament slot 1</label><input type="text" id="fil1"></div>
+      <div><label>Filament slot 2 <small class="hint">(distinct profile!)</small></label><input type="text" id="fil2"></div>
+    </div>
+    <label>Slicer binary (orca-slicer.exe)</label><input type="text" id="slicer">
+    <label>G-code output directory</label><input type="text" id="slice_outdir">
+    <button onclick="slice()">Slice &rarr; G-code + record</button>
+  </section>
+
+  <section>
+    <h2>3 &middot; Stage &amp; propose (human approves in the studio)</h2>
+    <div class="row">
+      <div><label>G-code path</label><input type="text" id="gcode_path"></div>
+      <div><label>Slice record path</label><input type="text" id="record_path"></div>
+    </div>
+    <label>Staging directory</label><input type="text" id="staging_dir">
+    <button class="secondary" onclick="stage()">Stage</button>
+    <label>Staged filename (from Stage)</label><input type="text" id="staged_name">
+    <label>Design sha256</label><input type="text" id="design_sha">
+    <button onclick="proposeUpload()">Propose upload</button>
+    <button onclick="proposePrint()">Propose print</button>
+    <small class="hint">Proposals only register a pending confirmation — approval is yours, in the studio dashboard.</small>
+  </section>
+
+  <section>
+    <h2>Printer</h2>
+    <div id="printer">&mdash;</div>
+    <h2 style="margin-top:14px">Pending approvals</h2>
+    <div id="pending">&mdash;</div>
+  </section>
+
+  <section id="log">
+    <h2>Activity — records &amp; degradations, verbatim</h2>
+    <div id="entries"></div>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const FIELDS = ["spec","spec_path","field_outdir","manifest_path","machine","process",
+                "fil1","fil2","slicer","slice_outdir","gcode_path","record_path",
+                "staging_dir","staged_name","design_sha"];
+
+async function api(path, body) {
+  const r = await fetch(path, { method:"POST", body: JSON.stringify(body||{}) });
+  return { status: r.status, data: await r.json() };
+}
+function saveCfg() {
+  const cfg = {};
+  for (const f of FIELDS) cfg[f] = $(f).value;
+  fetch("/api/config", { method:"POST", body: JSON.stringify(cfg) });
+}
+function logEntry(title, res) {
+  const ok = res.status === 200;
+  const div = document.createElement("div");
+  div.className = "entry";
+  let html = `<div class="head">${title} — <span class="${ok?"ok":"err"}">${ok?"ok":"failed"}</span></div>`;
+  const degs = (res.data.record && res.data.record.degradations) || [];
+  for (const d of degs)
+    html += `<div class="deg">&#9888; ${d.code}: ${d.detail}</div>`;
+  if (res.data.error) html += `<div class="deg">&#10060; ${res.data.error}</div>`;
+  html += `<pre>${JSON.stringify(res.data, null, 1)}</pre>`;
+  div.innerHTML = html;
+  $("entries").prepend(div);
+}
+async function fieldCompile() {
+  saveCfg();
+  // write the spec text to spec_path via the slice of config? The server compiles
+  // from a file: persist the textarea to the given path through /api/config? No —
+  // fieldengine reads a file, so save it client-side via the field compile call.
+  const res = await api("/api/fieldcompile",
+    { spec_path: $("spec_path").value, outdir: $("field_outdir").value, spec_text: $("spec").value });
+  logEntry("field compile", res);
+  if (res.status === 200 && res.data.manifest_path) $("manifest_path").value = res.data.manifest_path;
+}
+async function compile3mf() {
+  saveCfg();
+  const res = await api("/api/compile3mf", { manifest_path: $("manifest_path").value });
+  logEntry("obc3mf compile", res);
+  if (res.status === 200 && res.data.threemf_path) window._threemf = res.data.threemf_path;
+}
+async function slice() {
+  saveCfg();
+  const filaments = [$("fil1").value, $("fil2").value].filter(s => s);
+  const res = await api("/api/slice", {
+    model: window._threemf || $("manifest_path").value.replace(/manifest\.json$/, "field.3mf"),
+    machine: $("machine").value, process: $("process").value,
+    filaments, outdir: $("slice_outdir").value, slicer: $("slicer").value });
+  logEntry("slice", res);
+  if (res.status === 200) {
+    $("record_path").value = res.data.record_path || "";
+    if (res.data.gcode && res.data.gcode.length)
+      $("gcode_path").value = $("slice_outdir").value.replace(/[\\/]+$/,"") + "\\" + res.data.gcode[0].StrName;
+    if (res.data.record && res.data.record.inputs) {
+      const dp = res.data.record.inputs.design_provenance;
+      $("design_sha").value = (dp && dp.artifact_sha256) || res.data.record.inputs.model.sha256 || "";
+    }
+  }
+}
+async function stage() {
+  saveCfg();
+  const res = await api("/api/stage", { gcode: $("gcode_path").value,
+    slice_record: $("record_path").value, staging_dir: $("staging_dir").value });
+  logEntry("stage", res);
+  if (res.status === 200) {
+    $("staged_name").value = res.data.staged_filename || "";
+    if (res.data.design_sha256) $("design_sha").value = res.data.design_sha256;
+  }
+}
+async function proposeUpload() {
+  const res = await api("/api/propose-upload",
+    { filename: $("staged_name").value, design_sha256: $("design_sha").value });
+  logEntry("propose upload", res);
+}
+async function proposePrint() {
+  const res = await api("/api/propose-print",
+    { filename: $("staged_name").value, design_sha256: $("design_sha").value });
+  logEntry("propose print", res);
+}
+async function poll() {
+  try {
+    const res = await api("/api/studio-state");
+    if (res.data.unreachable) {
+      $("studio").innerHTML = "studio: <span style='color:var(--err)'>unreachable</span>";
+      $("printer").textContent = "—"; $("pending").textContent = "—";
+    } else {
+      $("studio").innerHTML = "studio: <span class='on'>connected</span>";
+      const ps = (res.data.state.status && res.data.state.status.print_stats) || {};
+      $("printer").innerHTML =
+        `state <b>${ps.state||"?"}</b> &middot; file <code>${ps.filename||"—"}</code>`;
+      const p = res.data.pending || [];
+      $("pending").innerHTML = p.length
+        ? p.map(x => `<div class="deg">&#9203; ${x.confirmation_id}: ${x.will_run}</div>`).join("")
+        : "none";
+    }
+  } catch (e) { /* server restarting */ }
+  setTimeout(poll, 4000);
+}
+(async () => {
+  const cfg = await (await fetch("/api/config")).json();
+  for (const f of FIELDS) if (cfg[f] !== undefined) $(f).value = cfg[f];
+  poll();
+})();
+</script>
+</body>
+</html>
