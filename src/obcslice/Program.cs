@@ -18,6 +18,9 @@ public static class Program
         Slices headlessly via OrcaSlicer_AS and writes <model-stem>.slice.json
         (canonical JSON, schema obc-slice/0.1) next to the G-code.
         Exit codes: 0 ok · 1 slice failed (record still written) · 2 invalid arguments/inputs.
+
+        obcslice material pin ...   pin an Open Filament Database record (obc-material/0.1);
+                                    `obcslice material --help` for the flags.
         """;
 
     public static int Main(string[] args)
@@ -40,8 +43,10 @@ public static class Program
             Console.WriteLine(StrUsage);
             return args.Length == 0 ? 2 : 0;
         }
+        if (args[0] == "material")
+            return MaterialCommand.Run(args);
         if (args[0] != "slice")
-            throw new ArgumentException($"Unknown command '{args[0]}'. Only 'slice' exists in v0.1.");
+            throw new ArgumentException($"Unknown command '{args[0]}'. Commands: slice, material.");
 
         string? strModel = null, strMachine = null, strProcess = null, strOutDir = null;
         string? strSlicer = Environment.GetEnvironmentVariable("OBCSLICE_ORCA");

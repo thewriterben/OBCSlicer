@@ -19,7 +19,12 @@ public static class Program
                                  "printable_width_mm": 350, "printable_depth_mm": 350,
                                  "printable_height_mm": 350 },
                     "parts": [ { "mesh": "a.stl", "name": "body", "filament": 1,
+                                 "material": "pla-basic.material.json",
                                  "overrides": { "nozzle_temperature": "230" } }, ... ] }
+
+        "material" (optional) names an obc-material/0.1 record (obcslice material pin).
+        Its hash enters the compile record and any nozzle_temperature override must lie
+        inside the record's published print range, else the compile is refused.
 
         The printer block is required: project emission embeds machine facts and
         this tool never invents physical data.
@@ -131,6 +136,42 @@ public static class Program
                 throw new InvalidDataException(
                     $"Part '{strName}': set \"filament\", not an 'extruder' override.");
 
+            object? oMaterialRecord = null;
+            if (oPart.TryGetProperty("material", out JsonElement oMatEl))
+            {
+                string strMatRel = oMatEl.GetString()
+                    ?? throw new InvalidDataException($"Part '{strName}': \"material\" must be a path string.");
+                string strMat = Path.IsPathRooted(strMatRel) ? strMatRel : Path.Combine(strManifestDir, strMatRel);
+                if (!File.Exists(strMat))
+                    throw new FileNotFoundException($"Part '{strName}': material record not found: {strMat}");
+                MaterialPin.Summary oMatSum = MaterialPin.Load(strMat);
+                foreach (string strKey in new[] { "nozzle_temperature", "nozzle_temperature_initial_layer" })
+                {
+                    if (!oOverrides.TryGetValue(strKey, out string? strT)) continue;
+                    if (!int.TryParse(strT, NumberStyles.Integer, CultureInfo.InvariantCulture, out int nT))
+                        throw new InvalidDataException($"Part '{strName}': {strKey} '{strT}' is not an integer.");
+                    if (oMatSum.NMinNozzleC is null || oMatSum.NMaxNozzleC is null)
+                    {
+                        aDegradations.Add(new Degradation("material_temperature_unverified",
+                            $"{strName}: {strKey}={nT} set, but {oMatSum.StrName} publishes no print range in OFD {oMatSum.StrDatasetVersion}."));
+                        continue;
+                    }
+                    if (nT < oMatSum.NMinNozzleC || nT > oMatSum.NMaxNozzleC)
+                        throw new InvalidDataException(
+                            $"Part '{strName}': {strKey}={nT} is outside {oMatSum.StrName}'s published range " +
+                            $"{oMatSum.NMinNozzleC}-{oMatSum.NMaxNozzleC} C (OFD {oMatSum.StrDatasetVersion}). " +
+                            "Change the override or pin a different material; the compiler will not guess.");
+                }
+                oMaterialRecord = new Dictionary<string, object?>
+                {
+                    ["record"] = Path.GetFileName(strMat),
+                    ["record_sha256"] = oMatSum.StrRecordSha256,
+                    ["filament_id"] = oMatSum.StrFilamentId,
+                    ["filament_name"] = oMatSum.StrName,
+                    ["dataset_version"] = oMatSum.StrDatasetVersion,
+                };
+            }
+
             IndexedMesh oIndexed = StlReader.Read(strMesh);
             int nOpen = oIndexed.NOpenEdges();
             if (nOpen > 0)
@@ -152,6 +193,7 @@ public static class Program
                 ["filament"] = nFilament,
                 ["triangles"] = oIndexed.Triangles.Count,
                 ["overrides"] = oOverrides.ToDictionary(kv => kv.Key, kv => (object?)kv.Value),
+                ["material"] = oMaterialRecord,
             });
         }
 

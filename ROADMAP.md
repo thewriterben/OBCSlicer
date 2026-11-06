@@ -38,7 +38,7 @@ Close the ecosystem's actual gap first: ODC `handoff` stages STL + sidecar to a 
 
 - [ ] 3MF volumetric extension read (and write where the spec is stable) in the Field Engine
 - [ ] BINGO: slice record referenced from fabrication evidence (extend the ODC↔BINGO contract with the middle link)
-- [ ] Open Filament Database as cited material source for purge/compatibility data
+- [x] Open Filament Database as cited material source: `obcslice material pin` → `obc-material/0.1`, manifest-verified; obc3mf checks nozzle temperature overrides against it (docs/specs/MATERIAL.md). Purge data is **not** in OFD and stays TODO(source) (2026-11-04)
 - [ ] Oh-Ben-Claw registry consumption where slicing needs component ground truth (e.g. embedded-part prints)
 
 ## P5 — True FGM (hardware-gated)
