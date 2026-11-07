@@ -49,6 +49,8 @@ public static class MaterialCommand
         if ((strFromFile is null) != (strManifestFile is null))
             throw new ArgumentException("--from-file and --manifest-file go together.");
 
+        MaterialPin.ValidateSegments(strBrand, strMaterial, strFilament);
+        string strPath = MaterialPin.StrManifestPath(strBrand, strMaterial, strFilament);
         byte[] abFilament, abManifest;
         if (strFromFile is not null)
         {
@@ -61,10 +63,18 @@ public static class MaterialCommand
         {
             using var oHttp = new HttpClient();
             oHttp.DefaultRequestHeaders.UserAgent.ParseAdd("obcslice/0.1.0");
-            abManifest = oHttp.GetByteArrayAsync(MaterialPin.StrBaseUrl + "manifest.json").GetAwaiter().GetResult();
-            abFilament = oHttp.GetByteArrayAsync(
-                MaterialPin.StrBaseUrl + MaterialPin.StrManifestPath(strBrand, strMaterial, strFilament))
-                .GetAwaiter().GetResult();
+            byte[] AbGet(string strRel)
+            {
+                try { return oHttp.GetByteArrayAsync(MaterialPin.StrBaseUrl + strRel).GetAwaiter().GetResult(); }
+                catch (HttpRequestException e) { throw new InvalidDataException($"fetch {strRel} failed: {e.Message}"); }
+                catch (TaskCanceledException) { throw new InvalidDataException($"fetch {strRel} timed out."); }
+            }
+            abManifest = AbGet("manifest.json");
+            // Refuse an unknown filament before asking the server for it.
+            if (!MaterialPin.BInManifest(abManifest, strPath))
+                throw new InvalidDataException(
+                    $"{strPath} is not in the OFD manifest: brand/material/filament does not exist in that dataset.");
+            abFilament = AbGet(strPath);
         }
 
         byte[] abRecord = MaterialPin.Build(

@@ -129,8 +129,9 @@ public static class Program
             if (oPart.TryGetProperty("overrides", out JsonElement oOv)
                 && oOv.ValueKind == JsonValueKind.Object)
                 foreach (JsonProperty oProp in oOv.EnumerateObject())
-                    oOverrides[oProp.Name] = oProp.Value.GetString()
-                        ?? throw new InvalidDataException(
+                    oOverrides[oProp.Name] = oProp.Value.ValueKind == JsonValueKind.String
+                        && oProp.Value.GetString() is string strV ? strV
+                        : throw new InvalidDataException(
                             $"Part '{strName}': override '{oProp.Name}' must be a string.");
             if (oOverrides.ContainsKey("extruder"))
                 throw new InvalidDataException(
@@ -139,8 +140,9 @@ public static class Program
             object? oMaterialRecord = null;
             if (oPart.TryGetProperty("material", out JsonElement oMatEl))
             {
-                string strMatRel = oMatEl.GetString()
-                    ?? throw new InvalidDataException($"Part '{strName}': \"material\" must be a path string.");
+                string strMatRel = oMatEl.ValueKind == JsonValueKind.String && oMatEl.GetString() is string strM
+                    && strM.Length > 0 ? strM
+                    : throw new InvalidDataException($"Part '{strName}': \"material\" must be a path string.");
                 string strMat = Path.IsPathRooted(strMatRel) ? strMatRel : Path.Combine(strManifestDir, strMatRel);
                 if (!File.Exists(strMat))
                     throw new FileNotFoundException($"Part '{strName}': material record not found: {strMat}");

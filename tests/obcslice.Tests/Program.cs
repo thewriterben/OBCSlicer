@@ -711,6 +711,56 @@ public static class Tests
         Assert.True(ObcSlice.Program.Main(new[] { "material", "pin", "--brand", "bambu_lab" }) == 2, "missing flags exit 2");
     }
 
+    public static void MaterialLoadReadsWholeDecimalTemperaturesAndRefusesFractions()
+    {
+        string strDir = Directory.CreateTempSubdirectory("obc-mat").FullName;
+        string Pin(string strMax)
+        {
+            var (strFil, strMan) = WriteOfdFixture(strDir,
+                StrOfdFilament.Replace("\"max_print_temperature\":230", "\"max_print_temperature\":" + strMax));
+            string strOut = Path.Combine(strDir, $"m{strMax}.material.json");
+            File.WriteAllBytes(strOut, MaterialPin.Build("bambu_lab", "PLA", "basic",
+                File.ReadAllBytes(strFil), File.ReadAllBytes(strMan), DateTime.UtcNow));
+            return strOut;
+        }
+        Assert.True(MaterialPin.Load(Pin("230.0")).NMaxNozzleC == 230, "230.0 reads as 230");
+        Assert.True(MaterialPin.Load(Pin("2.3e2")).NMaxNozzleC == 230, "2.3e2 reads as 230");
+        Assert.Throws<InvalidDataException>(() => MaterialPin.Load(Pin("215.5")), "215.5 is not a whole degree");
+    }
+
+    public static void MaterialPinRefusesQueryFragmentAndBackslashSegments()
+    {
+        foreach (string strBad in new[] { "basic?x=1", "basic#frag", "a\\b", "a/b", "..", "" })
+            Assert.Throws<ArgumentException>(() => MaterialPin.ValidateSegments("bambu_lab", "PLA", strBad), strBad);
+        MaterialPin.ValidateSegments("bambu_lab", "PLA", "basic");
+        string strDir = Directory.CreateTempSubdirectory("obc-mat").FullName;
+        var (strFil, strMan) = WriteOfdFixture(strDir);
+        Assert.True(ObcSlice.Program.Main(new[] { "material", "pin", "--brand", "bambu_lab", "--material", "PLA",
+            "--filament", "basic?x", "--out", Path.Combine(strDir, "o.json"),
+            "--from-file", strFil, "--manifest-file", strMan }) == 2, "'?' in a segment exits 2");
+        byte[] abMan = File.ReadAllBytes(strMan);
+        Assert.True(MaterialPin.BInManifest(abMan, MaterialPin.StrManifestPath("bambu_lab", "PLA", "basic")), "listed");
+        Assert.True(!MaterialPin.BInManifest(abMan, MaterialPin.StrManifestPath("bambu_lab", "PLA", "galaxy")), "not listed");
+        Assert.Throws<InvalidDataException>(() => MaterialPin.BInManifest(Encoding.ASCII.GetBytes("{"), "x"), "bad JSON");
+    }
+
+    public static void Obc3mfRefusesNonStringMaterialAndOverride()
+    {
+        string strDir = Directory.CreateTempSubdirectory("obc3mf-mat").FullName;
+        WriteTetraStl(Path.Combine(strDir, "body.stl"));
+        string strManifest = Path.Combine(strDir, "m.json");
+        string StrManifest(string strPartExtra) => """
+            { "output": "part.3mf",
+              "printer": { "nozzle_diameter_mm": "0.4", "printable_width_mm": 350,
+                           "printable_depth_mm": 350, "printable_height_mm": 350 },
+              "parts": [ { "mesh": "body.stl", "name": "body", "filament": 1, EXTRA } ] }
+            """.Replace("EXTRA", strPartExtra);
+        File.WriteAllText(strManifest, StrManifest("\"material\": 7"));
+        Assert.True(Obc3mf.Program.Main(new[] { "compile", "--manifest", strManifest }) == 2, "numeric material exits 2");
+        File.WriteAllText(strManifest, StrManifest("\"overrides\": { \"nozzle_temperature\": 220 }"));
+        Assert.True(Obc3mf.Program.Main(new[] { "compile", "--manifest", strManifest }) == 2, "numeric override exits 2");
+    }
+
     public static void Obc3mfChecksNozzleTemperatureAgainstPinnedMaterial()
     {
         string strDir = Directory.CreateTempSubdirectory("obc3mf-mat").FullName;

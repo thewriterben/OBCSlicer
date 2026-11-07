@@ -59,6 +59,38 @@ public static class MaterialPin
     public static string StrManifestPath(string strBrand, string strMaterial, string strFilament)
         => $"api/v1/brands/{strBrand}/materials/{strMaterial}/filaments/{strFilament}/index.json";
 
+    /// <summary>Each id becomes one URL path segment, so it may not carry a separator,
+    /// a parent step, or a query/fragment marker. Throws ArgumentException.</summary>
+    public static void ValidateSegments(params string[] astr)
+    {
+        foreach (string s in astr)
+            if (s.Length == 0 || s.IndexOfAny(new[] { '/', '\\', '?', '#' }) >= 0
+                || s.Contains("..", StringComparison.Ordinal))
+                throw new ArgumentException($"Invalid path segment '{s}'.");
+    }
+
+    /// <summary>True when the manifest lists <paramref name="strPath"/>. Lets the fetch
+    /// path refuse an unknown filament before requesting it.</summary>
+    public static bool BInManifest(byte[] abManifest, string strPath)
+    {
+        try
+        {
+            using JsonDocument oMan = JsonDocument.Parse(abManifest);
+            if (!oMan.RootElement.TryGetProperty("artifacts", out JsonElement oArts)
+                || oArts.ValueKind != JsonValueKind.Array)
+                throw new InvalidDataException("manifest has no \"artifacts\" array.");
+            foreach (JsonElement oArt in oArts.EnumerateArray())
+                if (oArt.ValueKind == JsonValueKind.Object && oArt.TryGetProperty("path", out JsonElement oP)
+                    && oP.ValueKind == JsonValueKind.String && oP.GetString() == strPath)
+                    return true;
+            return false;
+        }
+        catch (JsonException e)
+        {
+            throw new InvalidDataException($"manifest is not valid JSON: {e.Message}");
+        }
+    }
+
     /// <summary>Build the canonical record. Throws InvalidDataException on any
     /// refusal: not in manifest, hash mismatch, size mismatch, missing required
     /// field, non-numeric value where the schema says number, identity mismatch.</summary>
@@ -66,10 +98,7 @@ public static class MaterialPin
         string strBrand, string strMaterial, string strFilament,
         byte[] abFilament, byte[] abManifest, DateTime oRetrievedUtc)
     {
-        foreach (string s in new[] { strBrand, strMaterial, strFilament })
-            if (s.Length == 0 || s.Contains('/') || s.Contains("..", StringComparison.Ordinal))
-                throw new ArgumentException($"Invalid path segment '{s}'.");
-
+        ValidateSegments(strBrand, strMaterial, strFilament);
         string strPath = StrManifestPath(strBrand, strMaterial, strFilament);
 
         // --- manifest: dataset identity and the expected hash ---------------
@@ -210,8 +239,18 @@ public static class MaterialPin
         JsonElement oFil = oRoot.GetProperty("filament");
         JsonElement oSrc = oRoot.GetProperty("source");
         JsonElement oProps = oRoot.GetProperty("properties");
-        int? NTemp(string k) => oProps.TryGetProperty(k, out JsonElement o) && o.GetString() is string s
-            ? int.Parse(s, NumberStyles.Integer, CultureInfo.InvariantCulture) : null;
+        // Build keeps the source's own number text, so 230, 230.0 and 2.3e2 can all appear.
+        int? NTemp(string k)
+        {
+            if (!oProps.TryGetProperty(k, out JsonElement o) || o.ValueKind != JsonValueKind.String
+                || o.GetString() is not string s)
+                return null;
+            if (!decimal.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out decimal d))
+                throw new InvalidDataException($"{strPath}: {k} '{s}' is not a number.");
+            if (d != decimal.Truncate(d) || d < int.MinValue || d > int.MaxValue)
+                throw new InvalidDataException($"{strPath}: {k} '{s}' is not a whole degree.");
+            return (int)d;
+        }
         return new Summary(
             Convert.ToHexString(SHA256.HashData(ab)).ToLowerInvariant(),
             StrField(oFil, "id", "material record"), StrField(oFil, "name", "material record"),
