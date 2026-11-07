@@ -624,4 +624,170 @@ public static class Tests
         });
         Assert.True(nExit == 2, $"mismatch must exit 2, got {nExit}");
     }
+
+    // ---- obc-material/0.1: Open Filament Database pin ------------------------
+
+    private const string StrOfdFilament = """
+        {"uuid":"u","id":"ce414bd4-ea08-58c5-97f0-0396d2aedb47","name":"PLA Basic",
+         "diameter_tolerance":0.03,"density":1.24,
+         "min_print_temperature":190,"max_print_temperature":230,
+         "min_bed_temperature":35,"max_bed_temperature":45,"max_volumetric_speed":21,
+         "min_fan_speed":100,"max_fan_speed":100,"dry_temperature":50,"dry_time":8,
+         "data_sheet_url":"https://example.invalid/tds.pdf",
+         "slicer_settings":{"orcaslicer":{"generic_id":"GFL99","id":"OGFA00","profile_name":"Bambu PLA Basic"}},
+         "slug":"basic","material":"PLA","discontinued":false}
+        """;
+
+    private static (string StrFil, string StrMan) WriteOfdFixture(string strDir, string strFilament = StrOfdFilament,
+        string? strSha = null)
+    {
+        string strFil = Path.Combine(strDir, "filament.json");
+        File.WriteAllText(strFil, strFilament);
+        byte[] ab = File.ReadAllBytes(strFil);
+        string strHash = strSha ?? Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(ab)).ToLowerInvariant();
+        string strMan = Path.Combine(strDir, "manifest.json");
+        File.WriteAllText(strMan,
+            "{\"dataset_version\":\"2026.11.04\",\"generated_at\":\"2026-11-04T02:16:41Z\",\"artifact_count\":1," +
+            "\"artifacts\":[{\"path\":\"api/v1/brands/bambu_lab/materials/PLA/filaments/basic/index.json\"," +
+            $"\"sha256\":\"{strHash}\",\"size\":{ab.Length}}}]}}");
+        return (strFil, strMan);
+    }
+
+    public static void MaterialPinBuildsCanonicalRecordFromVerifiedBytes()
+    {
+        string strDir = Directory.CreateTempSubdirectory("obc-mat").FullName;
+        var (strFil, strMan) = WriteOfdFixture(strDir);
+        byte[] ab = MaterialPin.Build("bambu_lab", "PLA", "basic",
+            File.ReadAllBytes(strFil), File.ReadAllBytes(strMan), new DateTime(2026, 11, 4, 12, 0, 0, DateTimeKind.Utc));
+        string str = Encoding.ASCII.GetString(ab);
+        Assert.True(str.StartsWith("{\"absent_in_source\":[", StringComparison.Ordinal), "canonical: sorted keys, no whitespace");
+        Assert.True(str.Contains("\"density_g_cm3\":\"1.24\""), "density is the source's own text");
+        Assert.True(str.Contains("\"max_print_temperature_c\":\"230\""), "temperature lifted with unit key");
+        Assert.True(str.Contains("\"dataset_version\":\"2026.11.04\""), "dataset version pinned");
+        Assert.True(str.Contains("\"not_in_source\":[\"shrinkage\""), "OFD is never cited for shrinkage");
+        Assert.True(str.Contains("\"chamber_temperature_c\""), "absent optional fields are listed, not defaulted");
+        Assert.True(str.Contains("\"orcaslicer\":{\"generic_id\":\"GFL99\",\"id\":\"OGFA00\""), "slicer profile ids carried");
+        Assert.True(!str.Contains("1.24,") && !str.Contains(":1.24"), "no bare floats anywhere");
+        // byte-stable: same inputs, same bytes
+        byte[] ab2 = MaterialPin.Build("bambu_lab", "PLA", "basic",
+            File.ReadAllBytes(strFil), File.ReadAllBytes(strMan), new DateTime(2026, 11, 4, 12, 0, 0, DateTimeKind.Utc));
+        Assert.True(ab.AsSpan().SequenceEqual(ab2), "deterministic");
+    }
+
+    public static void MaterialPinRefusesManifestMismatchAndUnknownPath()
+    {
+        string strDir = Directory.CreateTempSubdirectory("obc-mat").FullName;
+        var (strFil, strMan) = WriteOfdFixture(strDir, strSha: new string('0', 64));
+        Assert.Throws<InvalidDataException>(() => MaterialPin.Build("bambu_lab", "PLA", "basic",
+            File.ReadAllBytes(strFil), File.ReadAllBytes(strMan), DateTime.UtcNow), "hash mismatch refused");
+        var (strFil2, strMan2) = WriteOfdFixture(strDir);
+        Assert.Throws<InvalidDataException>(() => MaterialPin.Build("bambu_lab", "PLA", "galaxy",
+            File.ReadAllBytes(strFil2), File.ReadAllBytes(strMan2), DateTime.UtcNow), "path not in manifest refused");
+        Assert.Throws<InvalidDataException>(() => MaterialPin.Build("bambu_lab", "PETG", "basic",
+            File.ReadAllBytes(strFil2), File.ReadAllBytes(strMan2), DateTime.UtcNow), "identity mismatch refused");
+    }
+
+    public static void MaterialPinRefusesMissingRequiredField()
+    {
+        string strDir = Directory.CreateTempSubdirectory("obc-mat").FullName;
+        var (strFil, strMan) = WriteOfdFixture(strDir,
+            "{\"id\":\"x\",\"name\":\"No density\",\"diameter_tolerance\":0.03,\"slug\":\"basic\",\"material\":\"PLA\"}");
+        Assert.Throws<InvalidDataException>(() => MaterialPin.Build("bambu_lab", "PLA", "basic",
+            File.ReadAllBytes(strFil), File.ReadAllBytes(strMan), DateTime.UtcNow), "density required by OFD schema");
+    }
+
+    public static void MaterialCliPinsFromFilesAndSummaryLoads()
+    {
+        string strDir = Directory.CreateTempSubdirectory("obc-mat").FullName;
+        var (strFil, strMan) = WriteOfdFixture(strDir);
+        string strOut = Path.Combine(strDir, "pla-basic.material.json");
+        int nExit = ObcSlice.Program.Main(new[] { "material", "pin", "--brand", "bambu_lab", "--material", "PLA",
+            "--filament", "basic", "--out", strOut, "--from-file", strFil, "--manifest-file", strMan });
+        Assert.True(nExit == 0, $"pin exit 0, got {nExit}");
+        MaterialPin.Summary oSum = MaterialPin.Load(strOut);
+        Assert.Equal("PLA Basic", oSum.StrName);
+        Assert.True(oSum.NMinNozzleC == 190 && oSum.NMaxNozzleC == 230, "range read back");
+        Assert.True(ObcSlice.Program.Main(new[] { "material", "pin", "--brand", "bambu_lab" }) == 2, "missing flags exit 2");
+    }
+
+    public static void MaterialLoadReadsWholeDecimalTemperaturesAndRefusesFractions()
+    {
+        string strDir = Directory.CreateTempSubdirectory("obc-mat").FullName;
+        string Pin(string strMax)
+        {
+            var (strFil, strMan) = WriteOfdFixture(strDir,
+                StrOfdFilament.Replace("\"max_print_temperature\":230", "\"max_print_temperature\":" + strMax));
+            string strOut = Path.Combine(strDir, $"m{strMax}.material.json");
+            File.WriteAllBytes(strOut, MaterialPin.Build("bambu_lab", "PLA", "basic",
+                File.ReadAllBytes(strFil), File.ReadAllBytes(strMan), DateTime.UtcNow));
+            return strOut;
+        }
+        Assert.True(MaterialPin.Load(Pin("230.0")).NMaxNozzleC == 230, "230.0 reads as 230");
+        Assert.True(MaterialPin.Load(Pin("2.3e2")).NMaxNozzleC == 230, "2.3e2 reads as 230");
+        Assert.Throws<InvalidDataException>(() => MaterialPin.Load(Pin("215.5")), "215.5 is not a whole degree");
+    }
+
+    public static void MaterialPinRefusesQueryFragmentAndBackslashSegments()
+    {
+        foreach (string strBad in new[] { "basic?x=1", "basic#frag", "a\\b", "a/b", "..", "" })
+            Assert.Throws<ArgumentException>(() => MaterialPin.ValidateSegments("bambu_lab", "PLA", strBad), strBad);
+        MaterialPin.ValidateSegments("bambu_lab", "PLA", "basic");
+        string strDir = Directory.CreateTempSubdirectory("obc-mat").FullName;
+        var (strFil, strMan) = WriteOfdFixture(strDir);
+        Assert.True(ObcSlice.Program.Main(new[] { "material", "pin", "--brand", "bambu_lab", "--material", "PLA",
+            "--filament", "basic?x", "--out", Path.Combine(strDir, "o.json"),
+            "--from-file", strFil, "--manifest-file", strMan }) == 2, "'?' in a segment exits 2");
+        byte[] abMan = File.ReadAllBytes(strMan);
+        Assert.True(MaterialPin.BInManifest(abMan, MaterialPin.StrManifestPath("bambu_lab", "PLA", "basic")), "listed");
+        Assert.True(!MaterialPin.BInManifest(abMan, MaterialPin.StrManifestPath("bambu_lab", "PLA", "galaxy")), "not listed");
+        Assert.Throws<InvalidDataException>(() => MaterialPin.BInManifest(Encoding.ASCII.GetBytes("{"), "x"), "bad JSON");
+    }
+
+    public static void Obc3mfRefusesNonStringMaterialAndOverride()
+    {
+        string strDir = Directory.CreateTempSubdirectory("obc3mf-mat").FullName;
+        WriteTetraStl(Path.Combine(strDir, "body.stl"));
+        string strManifest = Path.Combine(strDir, "m.json");
+        string StrManifest(string strPartExtra) => """
+            { "output": "part.3mf",
+              "printer": { "nozzle_diameter_mm": "0.4", "printable_width_mm": 350,
+                           "printable_depth_mm": 350, "printable_height_mm": 350 },
+              "parts": [ { "mesh": "body.stl", "name": "body", "filament": 1, EXTRA } ] }
+            """.Replace("EXTRA", strPartExtra);
+        File.WriteAllText(strManifest, StrManifest("\"material\": 7"));
+        Assert.True(Obc3mf.Program.Main(new[] { "compile", "--manifest", strManifest }) == 2, "numeric material exits 2");
+        File.WriteAllText(strManifest, StrManifest("\"overrides\": { \"nozzle_temperature\": 220 }"));
+        Assert.True(Obc3mf.Program.Main(new[] { "compile", "--manifest", strManifest }) == 2, "numeric override exits 2");
+    }
+
+    public static void Obc3mfChecksNozzleTemperatureAgainstPinnedMaterial()
+    {
+        string strDir = Directory.CreateTempSubdirectory("obc3mf-mat").FullName;
+        WriteTetraStl(Path.Combine(strDir, "body.stl"));
+        var (strFil, strMan) = WriteOfdFixture(strDir);
+        string strMat = Path.Combine(strDir, "pla.material.json");
+        Assert.True(ObcSlice.Program.Main(new[] { "material", "pin", "--brand", "bambu_lab", "--material", "PLA",
+            "--filament", "basic", "--out", strMat, "--from-file", strFil, "--manifest-file", strMan }) == 0, "pin");
+
+        string strManifest = Path.Combine(strDir, "m.json");
+        string StrManifest(string strTemp) => """
+            { "output": "part.3mf",
+              "printer": { "nozzle_diameter_mm": "0.4", "printable_width_mm": 350,
+                           "printable_depth_mm": 350, "printable_height_mm": 350 },
+              "parts": [ { "mesh": "body.stl", "name": "body", "filament": 1, "material": "pla.material.json",
+                           "overrides": { "nozzle_temperature": "TEMP" } } ] }
+            """.Replace("TEMP", strTemp);
+
+        File.WriteAllText(strManifest, StrManifest("260"));
+        Assert.True(Obc3mf.Program.Main(new[] { "compile", "--manifest", strManifest }) == 2,
+            "260 C is outside PLA Basic's 190-230: refused");
+
+        File.WriteAllText(strManifest, StrManifest("220"));
+        Assert.True(Obc3mf.Program.Main(new[] { "compile", "--manifest", strManifest }) == 0, "220 C accepted");
+        string strRecord = File.ReadAllText(Path.Combine(strDir, "part.3mf.project.json"));
+        Assert.True(strRecord.Contains("\"filament_name\":\"PLA Basic\""), "material identity in compile record");
+        Assert.True(strRecord.Contains("\"dataset_version\":\"2026.11.04\""), "dataset version in compile record");
+        Assert.True(strRecord.Contains("\"record_sha256\":\""), "material record hash in compile record");
+    }
 }

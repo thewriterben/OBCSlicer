@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-04 — obc-material/0.1: the Open Filament Database as a cited material source
+
+- `obcslice material pin --brand --material --filament --out`: fetches one OFD filament record and `manifest.json`, verifies the bytes against the manifest sha256/size for the stated `dataset_version`, and writes a canonical `obc-material/0.1` record (docs/specs/MATERIAL.md). Numbers are carried as the source's own JSON text with unit-suffixed keys; fields the filament lacks are listed in `absent_in_source`; what OFD never carries (shrinkage, mechanical data) is named in `not_in_source` so the record cannot be mis-cited (ADR-0013 in OpenDesignCore). `--from-file/--manifest-file` for offline use. Refusals exit 2 with nothing written.
+- obc3mf: a part may name a `"material"` record. Its hash, filament id and dataset version enter the compile record; `nozzle_temperature` / `nozzle_temperature_initial_layer` overrides outside the published print range are refused, a missing range is a recorded degradation.
+- First pin on disk: `examples/materials/bambu-lab-pla-basic.material.json` (OFD dataset 2026.11.04). 32/32 tests (5 new, all offline fixtures).
+
 ## 2026-08-23 — obcslicer-ui: the GUI front-end
 
 - `src/obcslicer-ui`: loopback web GUI (127.0.0.1:8771) in the studio-core dashboard style — HttpListener + one self-contained HTML page, zero packages. Three panels mirror the pipeline: field spec editor → compile; project compile + slice (profiles, slicer path); stage + propose (approval stays in the studio dashboard). Live printer state and pending approvals polled from studio-core; every record and degradation rendered verbatim in the activity log — the UI shows refusals, it never softens them.
